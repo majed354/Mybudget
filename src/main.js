@@ -1,6 +1,6 @@
 // مُنسّق التطبيق: حالة واحدة، توجيه بالهاش، وتفويض الأحداث.
 
-import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll } from './store.js';
+import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence } from './store.js';
 import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from './import.js';
 import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
 import { analyze } from './analytics.js';
@@ -24,6 +24,7 @@ const state = {
   filter: { q: '', cat: '', account: '', onlyUncat: false, onlyExcluded: false },
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
+  storage: null,
   busy: false,
 };
 
@@ -40,6 +41,7 @@ const ROUTES = {
 
 // ── الإقلاع ───────────────────────────────────────────────────────────────
 async function boot() {
+  state.storage = await requestPersistence();
   state.settings = await getSettings();
   state.rules = await getRules();
   const saved = await db.get('financeForm', null);

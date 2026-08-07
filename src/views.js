@@ -504,7 +504,16 @@ export function viewSettings(state, a) {
         <td><button class="btn tiny danger" data-action="del-rule" data-id="${r.id}">حذف</button></td>
       </tr>`).join('')}</tbody></table>` : empty('لا قواعد بعد — وسم أي عملية من صفحة العمليات يُنشئ قاعدة تلقائيًا.'))}
 
-    ${card('البيانات', `
+    ${card('البيانات وأين تُحفظ', `
+      <p class="lead">بياناتك محفوظة <strong>داخل هذا المتصفح على هذا الجهاز</strong> فقط — لا خادم ولا حساب ولا مزامنة.
+        فلا تظهر على جهاز آخر، ولا تنتقل بين نطاقين مختلفين.</p>
+      ${state.storage ? `<p class="hint">حالة التخزين:
+        ${state.storage.persisted
+          ? '✅ <strong>دائم</strong> — لن يمحوه المتصفح تلقائيًا.'
+          : '⚠️ <strong>غير مثبَّت</strong> — قد يمحوه المتصفح إن ضاقت المساحة أو طال عدم الاستخدام (سفاري على الجوال خاصةً). صدّر نسخة احتياطية.'}
+        ${state.storage.usage ? ` المستخدَم: ${money(state.storage.usage / 1048576, { bare: true })} م.ب.` : ''}</p>` : ''}
+      <p class="hint">للانتقال بين الأجهزة: صدّر نسخة كاملة، واحفظها في iCloud أو Drive، ثم استوردها في الجهاز الآخر.
+        النسخة تحمل العمليات والقواعد ووسمَ حساباتك معًا.</p>
       <div class="row gap wrap">
         <button class="btn" data-action="export-json">تصدير نسخة كاملة (JSON)</button>
         <button class="btn" data-action="export-csv">تصدير العمليات (CSV)</button>

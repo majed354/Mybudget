@@ -34,6 +34,24 @@ function wrap(request) {
   });
 }
 
+/**
+ * يطلب من المتصفح تثبيت التخزين.
+ * بعض المتصفحات — وسفاري على الجوال خاصةً — تُخلي تخزين المواقع تلقائيًا
+ * بعد فترة من عدم الاستخدام. هذا الطلب يجعل البيانات «دائمة» فلا تُمحى
+ * إلا بفعل المستخدم. لا يُمنح دائمًا، ولذلك تبقى النسخة المصدَّرة هي الضمان.
+ */
+export async function requestPersistence() {
+  if (!navigator.storage?.persist) return { supported: false, persisted: false };
+  try {
+    const already = await navigator.storage.persisted();
+    const persisted = already || await navigator.storage.persist();
+    const est = navigator.storage.estimate ? await navigator.storage.estimate() : {};
+    return { supported: true, persisted, usage: est.usage, quota: est.quota };
+  } catch {
+    return { supported: true, persisted: false };
+  }
+}
+
 export const db = {
   async allTx() {
     const s = await tx('tx');
