@@ -275,7 +275,7 @@ export function rowsToTransactions(rows, { account = 'حساب', source = '', de
   // بصمة كل عملية: رقمها إن وُجد، وإلا ترتيب ظهور المتطابقات داخل الملف
   const occ = new Map();
   for (const t of out) {
-    const base = `${t.date}|${t.amount}|${t.desc}`;
+    const base = `${t.date}|${t.amount}|${t.ref || t.desc}`;
     const n = occ.get(base) || 0;
     occ.set(base, n + 1);
     t.hash = hashTx(t, n);

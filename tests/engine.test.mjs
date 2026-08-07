@@ -121,6 +121,22 @@ test('dedupe يمنع تكرار العملية نفسها ويُبقي المت
   assert.equal(fresh.length, 0, 'إعادة استيراد الملف نفسه لا تضيف شيئًا');
 });
 
+test('تكرار الرقم المرجعي لا يبتلع أقساطًا حقيقية', () => {
+  // بنك البلاد يضع رقم العقد في أقساط التمويل، فيتكرر الرقم نفسه كل شهر
+  const rows = [HEADER,
+    row(1, '27/08/2025', 'سداد قسط تمويل', 'قسط', '-3473.65', '', '18919.24', 'LD2105200091'),
+    row(2, '28/09/2025', 'سداد قسط تمويل', 'قسط', '-3473.65', '', '15445.59', 'LD2105200091'),
+    row(3, '27/10/2025', 'سداد قسط تمويل', 'قسط', '-3473.65', '', '11971.94', 'LD2105200091'),
+  ];
+  const list = rowsToTransactions(rows, { account: 'أ' }).transactions;
+  assert.equal(new Set(list.map((t) => t.hash)).size, 3, 'ثلاثة أقساط في ثلاثة أشهر ليست عملية واحدة');
+  const { fresh } = dedupe(list, []);
+  assert.equal(fresh.length, 3);
+  // وإعادة استيراد الملف نفسه لا تُضيف شيئًا
+  const again = rowsToTransactions(rows, { account: 'أ' }).transactions;
+  assert.equal(dedupe(again, list.map((t) => t.hash)).fresh.length, 0);
+});
+
 // ── التصنيف ───────────────────────────────────────────────────────────────
 test('classifyType يفرّق بين أنواع عمليات البنك', () => {
   assert.equal(classifyType('', -50, 'مشتريات نقاط بيع'), 'pos');
