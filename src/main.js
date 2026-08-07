@@ -238,7 +238,8 @@ async function handleFiles(files) {
 
   if (!collected.length) { state.pending = null; toast(warnings[0] || 'تعذّر قراءة الملف', 'danger'); render(); return; }
 
-  applyClassification(collected, state.rules);
+  // المعاينة تُظهر ما ستراه بعد الاعتماد تمامًا: قواعدك ووسمُ حساباتك مطبَّقة
+  applyClassification(collected, state.rules, state.settings?.ownAccounts);
   const { fresh, dups } = dedupe(collected, await db.existingHashes());
   state.pending = { fileName, transactions: collected, fresh, dups, skipped, warnings, balanceCheck };
   render();

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { parseNumber, toISODate, percentile, median, hashTx } from '../src/util.js';
 import { rowsToTransactions, verifyBalances, parseCSV, detectHeader, inferColumns, dedupe } from '../src/import.js';
-import { classifyType, extractMerchant, applyClassification, guessCategoryFromMerchant } from '../src/classify.js';
+import { classifyType, extractMerchant, applyClassification, guessCategoryFromMerchant, merchantKey } from '../src/classify.js';
 import { markExclusions, findRecurring, analyze } from '../src/analytics.js';
 import { installmentOf, effectiveAPR, evaluate, planTerms, maxAmountFor, VERDICT, DEFAULT_POLICY } from '../src/affordability.js';
 
@@ -173,6 +173,34 @@ test('وسم المستخدم لا تدهسه القواعد الآلية', () =
   const tx = [{ id: '1', date: '2026-01-01', amount: -50, desc: '', bankType: 'مشتريات نقاط بيع', details: 'Keeta', category: 'travel', categorySource: 'user' }];
   applyClassification(tx, []);
   assert.equal(tx[0].category, 'travel');
+});
+
+test('القواعد ووسمُ الحسابات تسري تلقائيًا على كشفٍ يُرفع لاحقًا', () => {
+  // ما يتعلّمه النظام من كشف أغسطس يجب أن يُطبَّق على كشف سبتمبر بلا تدخّل
+  const rules = [
+    { id: 'r1', field: 'merchant', op: 'key', value: merchantKey('NJAIM SAADI'), category: 'dining', priority: 10 },
+    { id: 'r2', field: 'type', op: 'equals', value: 'atm_out', category: 'groceries', priority: 5 },
+  ];
+  const own = { ibans: ['SA6680000409608010079587'], merchants: [merchantKey('STC Pay')] };
+
+  const later = [
+    { id: '1', date: '2026-09-03', amount: -180, bankType: 'مشتريات نقاط بيع', details: 'مشتريات نقاط بيع\nNJAIM SAADI' },
+    { id: '2', date: '2026-09-05', amount: -700, bankType: 'سحب آلي', details: 'سحب آلي\nAL RAJHI BANK' },
+    { id: '3', date: '2026-09-08', amount: -9000, bankType: 'حوالة فورية صادرة', details: 'حوالة فورية صادرة\nSA6680000409608010079587' },
+    { id: '4', date: '2026-09-09', amount: -500, bankType: 'مشتريات نقاط بيع', details: 'مشتريات نقاط بيع\nSABS2I43 + STC Pay + البنك السعودي البريطاني' },
+    { id: '5', date: '2026-09-11', amount: -60, bankType: 'مشتريات نقاط بيع', details: 'مشتريات نقاط بيع\nADAM PHARMACY' },
+  ];
+  applyClassification(later, rules, own);
+
+  assert.equal(later[0].category, 'dining', 'قاعدة التاجر تسري على الكشف الجديد');
+  assert.equal(later[1].category, 'groceries', 'قاعدة نوع العملية تسري كذلك');
+  assert.equal(later[2].type, 'internal', 'الآيبان الموسوم بأنه حسابك يخرج من الصرف');
+  assert.equal(later[3].type, 'internal', 'المحفظة الموسومة تخرج كذلك');
+  assert.equal(later[4].category, 'health', 'وما لم تُوسمه يلتقطه القاموس المدمج');
+
+  const a = analyze(later, { analysis: {}, ownAccounts: own });
+  const spent = a.categories.reduce((s, c) => s + c.total, 0);
+  assert.equal(Math.round(spent), 940, 'المستبعد لا يدخل في الصرف: 180+700+60 فقط');
 });
 
 // ── الاستبعادات ───────────────────────────────────────────────────────────
