@@ -504,6 +504,10 @@ export function viewSettings(state, a) {
         <td><button class="btn tiny danger" data-action="del-rule" data-id="${r.id}">حذف</button></td>
       </tr>`).join('')}</tbody></table>` : empty('لا قواعد بعد — وسم أي عملية من صفحة العمليات يُنشئ قاعدة تلقائيًا.'))}
 
+    ${card('التنبيهات', notifyBody(state), { cls: state.notify?.enabled ? 'own' : '' })}
+
+    ${card('المزامنة بين الأجهزة', syncBody(state), { cls: state.sync?.secret ? 'own' : '' })}
+
     ${card('البيانات وأين تُحفظ', `
       <p class="lead">بياناتك محفوظة <strong>داخل هذا المتصفح على هذا الجهاز</strong> فقط — لا خادم ولا حساب ولا مزامنة.
         فلا تظهر على جهاز آخر، ولا تنتقل بين نطاقين مختلفين.</p>
@@ -522,6 +526,53 @@ export function viewSettings(state, a) {
       </div>
       <p class="hint">كل شيء محفوظ في متصفحك (IndexedDB). مسح بيانات الموقع يمحوها، فاحتفظ بنسخة إن أردت.</p>`)}
   </div>`;
+}
+
+function notifyBody(state) {
+  const n = state.notify || {};
+  const list = state.reminders || [];
+  const blocked = n.permission === 'denied';
+  return `
+    <p class="lead">${n.enabled ? 'التنبيهات مفعّلة على هذا الجهاز.' : 'فعّل التنبيهات لتذكيرك بمواعيد الأقساط والراتب، وبتحديث الكشف، وبتجاوز وتيرة الصرف.'}</p>
+    <div class="row gap wrap">
+      <button class="btn ${n.enabled ? 'danger' : 'primary'}" data-action="notify-toggle" ${blocked && !n.enabled ? 'disabled' : ''}>
+        ${n.enabled ? 'إيقاف التنبيهات' : 'تفعيل التنبيهات'}</button>
+    </div>
+    ${blocked ? '<p class="hint danger-text">التنبيهات محظورة في إعدادات المتصفح لهذا الموقع — اسمح بها من إعدادات الموقع ثم أعد المحاولة.</p>' : ''}
+    ${list.length ? `<h3>تذكيرات قائمة الآن</h3>
+      <ul class="reminders">${list.map((r) => `<li><strong>${escapeHTML(r.title)}</strong> — ${escapeHTML(r.body)}</li>`).join('')}</ul>`
+      : '<p class="hint">لا تذكيرات مستحقّة اليوم.</p>'}
+    <p class="hint">حدٌّ تقني يلزم أن تعرفه: المتصفح لا يوقظ التطبيق وهو مغلق ما لم يوجد خادم دفع،
+      فالتنبيهات تظهر حين تفتحه أو يكون عاملًا في الخلفية. وعلى الآيفون لا تعمل إلا بعد
+      <strong>«إضافة إلى الشاشة الرئيسية»</strong>.</p>`;
+}
+
+function syncBody(state) {
+  const s = state.sync || {};
+  if (!s.secret) {
+    return `<p class="lead">فعّل المزامنة لتفتح بياناتك من الجوال ومن الحاسب ومن أي متصفح.</p>
+      <p class="hint">تُشفَّر بياناتك داخل متصفحك قبل أن تغادره (AES-GCM بمفتاح ٢٥٦ بت)، ولا يصل الخادم إلا نصٌّ مشفَّر
+        ومعرّفٌ مشتقٌّ من مفتاحك بدالة اتجاه واحد. لا نملك مفتاحك، ولا يمكننا قراءة كشوفك — ولا استعادتها إن أضعتَه.</p>
+      <div class="row gap wrap">
+        <button class="btn primary" data-action="sync-enable">فعّل المزامنة وأنشئ مفتاحًا</button>
+        <button class="btn" data-action="sync-link">لديّ مفتاح من جهاز آخر</button>
+      </div>`;
+  }
+  return `
+    <p class="lead">المزامنة مفعّلة. لفتح بياناتك على جهاز آخر: افتح الموقع هناك، ثم «لديّ مفتاح من جهاز آخر»، وألصق هذا المفتاح.</p>
+    <div class="secret-box">
+      <code class="secret">${escapeHTML(s.secret)}</code>
+      <button class="btn tiny" data-action="sync-copy">نسخ</button>
+    </div>
+    <p class="hint">⚠️ احفظ المفتاح في مدير كلمات السرّ. من يملكه يقرأ بياناتك، ومن يفقده يفقدها — لا نسخة لدينا منه.</p>
+    <div class="row gap wrap">
+      <button class="btn primary" data-action="sync-push" ${s.busy ? 'disabled' : ''}>ارفع الآن</button>
+      <button class="btn" data-action="sync-pull" ${s.busy ? 'disabled' : ''}>اسحب من الخادم</button>
+      <button class="btn danger" data-action="sync-off">إيقاف على هذا الجهاز</button>
+    </div>
+    <p class="hint">${s.busy ? 'جارٍ…' : s.lastAt ? `آخر مزامنة: ${escapeHTML(new Date(s.lastAt).toLocaleString('ar-SA'))}` : 'لم تُرفع نسخة بعد'}
+      ${s.status ? `<span class="danger-text"> — ${escapeHTML(s.status)}</span>` : ''}</p>
+    <p class="hint">الرفع يجري تلقائيًا بعد كل تغيير. وإن عدّلت على جهازين، تُدمج العمليات ولا يُدهس وسمُك اليدوي.</p>`;
 }
 
 function numField(id, label, value, placeholder = '') {

@@ -7,6 +7,12 @@
 <meta name="description" content="أداة تقيس معدل صرفك الشهري ومجالاته، وتحكم على طلب التمويل: مريح، أو مع ضغط، أو غير ملائم — من إنفاقك الفعلي لا من راتبك وحده.">
 <meta name="color-scheme" content="light dark">
 <link rel="stylesheet" href="assets/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ميزانيتي">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
 <script src="vendor/xlsx.full.min.js"></script>
 </head>
@@ -33,5 +39,10 @@
 </div>
 <div id="toast" class="toast"></div>
 <script type="module" src="src/main.js"></script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
 </body>
 </html>

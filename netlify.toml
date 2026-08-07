@@ -1,0 +1,22 @@
+# موقع ثابت بلا خطوة بناء، ودالة واحدة للمزامنة المشفَّرة.
+
+[build]
+  publish = "."
+  command = ""
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+
+# ملفات المكتبات المرفقة ثابتة، فتُخزَّن طويلًا
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -296,3 +296,14 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .card.own { border-color: var(--ok); }
 .table td.ben { font-size: .82rem; max-width: 320px; word-break: break-all; }
 .table td.ben .tag { margin-inline-start: 6px; }
+
+/* ── المزامنة والتنبيهات ────────────────────────────────── */
+.secret-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.secret {
+  flex: 1 1 260px; direction: ltr; text-align: center; letter-spacing: .06em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92rem; font-weight: 700;
+  background: var(--surface-2); border: 1px dashed var(--accent); border-radius: 10px;
+  padding: 10px; word-break: break-all; user-select: all;
+}
+.reminders { margin: 6px 0; padding-inline-start: 18px; font-size: .88rem; }
+.reminders li { margin: 4px 0; }

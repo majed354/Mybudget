@@ -6,6 +6,8 @@ import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
 import { analyze } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
 import { uid, groupBy, money, monthLabel } from './util.js';
+import * as Sync from './sync.js';
+import { computeReminders, ensurePermission, fireDue } from './reminders.js';
 import * as V from './views.js';
 
 const state = {
@@ -25,6 +27,9 @@ const state = {
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
   storage: null,
+  sync: { secret: null, lastAt: null, status: '', busy: false },
+  reminders: [],
+  notify: { permission: 'default', enabled: false },
   busy: false,
 };
 
@@ -44,6 +49,10 @@ async function boot() {
   state.storage = await requestPersistence();
   state.settings = await getSettings();
   state.rules = await getRules();
+  state.sync.secret = await db.get('syncSecret', null);
+  state.sync.lastAt = await db.get('syncLastAt', null);
+  state.notify.enabled = await db.get('notifyEnabled', false);
+  state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
   if (saved) state.finance = { ...state.finance, ...saved };
   await reload();
@@ -53,6 +62,100 @@ async function boot() {
     .map(([k, v]) => `<a href="#${k}" data-route="${k}"><span>${v.icon}</span>${v.ar}</a>`).join('');
   bindEvents();
   render();
+  if (state.sync.secret) syncPull({ silent: true });
+  checkReminders();
+}
+
+// ── التذكيرات ─────────────────────────────────────────────────────────────
+async function checkReminders() {
+  state.reminders = computeReminders(state.analysis);
+  if (!state.notify.enabled || !state.reminders.length) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const log = await db.get('notifyLog', { date: '', ids: [] });
+  const shown = log.date === today ? log.ids : [];
+  const fired = await fireDue(state.reminders, shown);
+  if (fired.length) await db.set('notifyLog', { date: today, ids: [...shown, ...fired] });
+}
+
+async function toggleNotifications() {
+  if (state.notify.enabled) {
+    state.notify.enabled = false;
+    await db.set('notifyEnabled', false);
+    toast('أُوقفت التنبيهات', 'warn');
+  } else {
+    const perm = await ensurePermission();
+    state.notify.permission = perm;
+    if (perm !== 'granted') {
+      toast(perm === 'denied' ? 'التنبيهات محظورة في إعدادات المتصفح' : 'لم يُمنح الإذن', 'danger');
+    } else {
+      state.notify.enabled = true;
+      await db.set('notifyEnabled', true);
+      toast('فُعّلت التنبيهات', 'ok');
+      await checkReminders();
+    }
+  }
+  render();
+}
+
+// ── المزامنة ──────────────────────────────────────────────────────────────
+
+/** يرفع نسخة مشفّرة بعد كل تغيير، بتأخير يمنع الرفع المتكرر. */
+function schedulePush() {
+  if (!state.sync.secret) return;
+  clearTimeout(schedulePush._t);
+  schedulePush._t = setTimeout(() => syncPush({ silent: true }), 2500);
+}
+
+async function syncPush({ silent = false } = {}) {
+  if (!state.sync.secret) return;
+  state.sync.busy = true;
+  try {
+    const out = await Sync.push(state.sync.secret, await exportAll());
+    state.sync.lastAt = out.updatedAt;
+    state.sync.status = '';
+    await db.set('syncLastAt', out.updatedAt);
+    if (!silent) toast('رُفعت نسخة مشفّرة', 'ok');
+  } catch (err) {
+    state.sync.status = err.message;
+    if (!silent) toast(err.message, 'danger');
+  } finally {
+    state.sync.busy = false;
+    if (state.route === 'settings') render();
+  }
+}
+
+async function syncPull({ silent = false } = {}) {
+  if (!state.sync.secret) return;
+  state.sync.busy = true;
+  try {
+    const out = await Sync.pull(state.sync.secret);
+    if (!out.found) {
+      state.sync.status = silent ? '' : 'لا توجد نسخة على الخادم بعد';
+      if (!silent) toast('لا توجد نسخة مخزَّنة لهذا المفتاح', 'warn');
+      return;
+    }
+    const merged = Sync.mergeSnapshots(await exportAll(), out.snapshot);
+    const added = merged.transactions.length - state.transactions.length;
+    await importAll(merged, { replace: true });
+    state.settings = await getSettings();
+    state.rules = await getRules();
+    state.sync.lastAt = out.updatedAt;
+    state.sync.status = '';
+    await db.set('syncLastAt', out.updatedAt);
+    await reload();
+    if (!silent || added > 0) toast(added > 0 ? `وصلت ${added} عملية من جهاز آخر` : 'بياناتك محدَّثة', 'ok');
+  } catch (err) {
+    state.sync.status = err.message;
+    if (!silent) toast(err.message, 'danger');
+  } finally {
+    state.sync.busy = false;
+    render();
+  }
+}
+
+async function setSyncSecret(secret) {
+  state.sync.secret = secret || null;
+  await db.set('syncSecret', state.sync.secret);
 }
 
 function routeFromHash() {
@@ -65,6 +168,7 @@ async function reload() {
   applyClassification(state.transactions, state.rules, state.settings?.ownAccounts);
   state.analysis = state.transactions.length ? analyze(state.transactions, state.settings) : null;
   state.accountsSummary = buildAccountsSummary(state.transactions);
+  state.reminders = computeReminders(state.analysis);
   recompute();
 }
 
@@ -171,6 +275,29 @@ function bindEvents() {
     if (action === 'toggle-exclude') { await toggleExclude(el.dataset.id); return; }
     if (action === 'del-rule') { await delRule(el.dataset.id); return; }
     if (action === 'toggle-own') { await toggleOwn(el.dataset.kind, el.dataset.key); return; }
+    if (action === 'notify-toggle') { await toggleNotifications(); return; }
+    if (action === 'sync-enable') { await setSyncSecret(Sync.newSecret()); await syncPush(); render(); return; }
+    if (action === 'sync-link') {
+      const k = prompt('ألصق مفتاح المزامنة من جهازك الآخر:');
+      if (!k) return;
+      await setSyncSecret(k.trim());
+      await syncPull();
+      return;
+    }
+    if (action === 'sync-push') { await syncPush(); return; }
+    if (action === 'sync-pull') { await syncPull(); return; }
+    if (action === 'sync-copy') {
+      await navigator.clipboard.writeText(state.sync.secret || '');
+      toast('نُسخ المفتاح — احفظه في مكان آمن', 'ok');
+      return;
+    }
+    if (action === 'sync-off') {
+      if (!confirm('إيقاف المزامنة على هذا الجهاز؟ البيانات المحلية تبقى كما هي.')) return;
+      await setSyncSecret(null);
+      toast('أُوقفت المزامنة', 'warn');
+      render();
+      return;
+    }
     if (action === 'export-json') { downloadJSON(); return; }
     if (action === 'export-csv') { downloadCSV(); return; }
     if (action === 'import-json') { pickJSON(); return; }
@@ -261,6 +388,7 @@ async function confirmImport() {
   state.pending = null;
   await reload();
   toast(`أُضيفت ${n} عملية`, 'ok');
+  schedulePush();
   location.hash = 'dashboard';
   render();
 }
@@ -292,6 +420,7 @@ async function setCategory(id, category) {
   await reload();
   const affected = state.transactions.filter((x) => x.category === category && x.merchantKey && x.merchantKey === t.merchantKey).length;
   toast(`صُنّفت ضمن «${CATEGORY_MAP[category]?.ar}»${affected > 1 ? ` وطُبّقت على ${affected} عملية` : ''}`, 'ok');
+  schedulePush();
   render();
 }
 
@@ -326,6 +455,7 @@ async function toggleOwn(kind, key) {
   toast(adding
     ? `استُبعدت ${hit.length} عملية بمجموع ${money(total)} — نقلُ مال لا صرف`
     : `أُعيدت ${hit.length} عملية إلى حساب الصرف`, adding ? 'ok' : 'warn');
+  schedulePush();
   render();
 }
 
@@ -394,6 +524,7 @@ async function updateSettings() {
   });
   await reload();
   toast('حُفظت الإعدادات', 'ok');
+  schedulePush();
   render();
 }
 
