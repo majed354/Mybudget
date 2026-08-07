@@ -286,3 +286,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .sidebar, .banner, .btn, .toast { display: none !important; }
   .card { break-inside: avoid; box-shadow: none; }
 }
+
+.verdict-note {
+  margin-top: 8px; padding: 8px 12px; border-radius: 9px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  font-size: .87rem; line-height: 1.6;
+}

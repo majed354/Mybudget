@@ -92,10 +92,15 @@ export function evaluate(profile, request, policy = DEFAULT_POLICY) {
 
   // الفائض الأساسي: بالسيناريو المعتاد (الوسيط).
   const baseSurplus = inc50 - ess50 - dis50 - existing - newInst;
-  // فائض اختبار الضغط: دخل متحفظ وإنفاق في الربيع الأعلى.
-  const stressSurplus = inc25 - ess75 - dis75 - existing - newInst;
+  // فائض اختبار الضغط: دخل متحفظ وإنفاق في شهر مرتفع.
+  // يُؤخذ الربيع الأعلى للإنفاق الكلي لا لكل بند على حدة، إذ لا تجتمع ذروةُ
+  // الملتزم وذروةُ المرن في شهر واحد عادةً، فجمعُهما يخلق شهرًا لم يقع قط.
+  const stressSpend = num(profile?.stressSpend, ess75 + dis75);
+  const stressSurplus = inc25 - stressSpend - existing - newInst;
   // الفائض قبل التمويل الجديد — يبيّن مقدار ما يبتلعه القسط.
   const surplusBefore = inc50 - ess50 - dis50 - existing;
+  // وفائضُ الضغط قبله: إن كان سالبًا فالفجوة قائمة أصلًا، والتمويل لم يصنعها.
+  const stressBefore = inc25 - stressSpend - existing;
 
   const dbr = inc50 > 0 ? totalInst / inc50 : Infinity;
   const instShare = inc50 > 0 ? newInst / inc50 : Infinity;
@@ -134,7 +139,7 @@ export function evaluate(profile, request, policy = DEFAULT_POLICY) {
     totalCost: newInst * (request.months || 0),
     profitCost: newInst * (request.months || 0) - (request.amount || 0),
     dbr, instShare, bufferMonths,
-    surplusBefore, baseSurplus, stressSurplus,
+    surplusBefore, stressBefore, stressSpend, baseSurplus, stressSurplus,
     burdenOfSurplus: surplusBefore > 0 ? newInst / surplusBefore : Infinity,
     checks,
     reasons: checks.filter((c) => !c.pass).map((c) => c.msg),
@@ -251,6 +256,7 @@ export function profileFromAnalytics(a, overrides = {}) {
     income: { p50: a?.income?.median || 0, p25: a?.income?.p25 || a?.income?.median || 0 },
     essentials: { p50: a?.essentials?.p50 || 0, p75: a?.essentials?.p75 || 0 },
     discretionary: { p50: a?.discretionary?.p50 || 0, p75: a?.discretionary?.p75 || 0 },
+    stressSpend: a?.stressSpend || 0,
     existingInstallments: a?.existingInstallments || 0,
     liquidBuffer: a?.liquidBuffer || 0,
     spendCV: a?.spendCV || 0,

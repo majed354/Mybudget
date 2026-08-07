@@ -65,6 +65,29 @@ const BANK_NAMES = /(مؤسسة الراجحي المصرفية للاستثما
 const NOISE = /(الرقم المرجعي للعملية|الرقم المرجعي|رقم مرجع العملية|مرجع العملية|اسم قناة تقديم الخدمة|اسم قناة تقديم|قناة تقديم الخدمة|نوع العملية|للعملية|الخدمة|الرقم|المرجعي)/g;
 const CITY_RE = /\b(MAKKAH|MECCA|JEDDAH|RIYADH|TAIF|MADINA|MEDINA|YANBU|DAMMAM|KHOBAR|ABHA|TABUK|HAIL|JAZAN|NAJRAN|BURAIDAH|ALKHOBAR|WESTERN REGIO[N]?)\b/i;
 
+// ── الحوالات: المستفيد والغرض ─────────────────────────────────────────────
+// كشف بنك البلاد يذكر في تفاصيل كل حوالة «الغرض» الذي اختاره المُرسِل،
+// و«شخصي في بنك آخر» تعني تحويلًا إلى حساب المستخدم نفسه لدى بنك آخر —
+// وهذه أهم إشارة في الكشف كله، إذ تفصل نقلَ المال عن الصرف.
+
+export const PURPOSE_SELF = 'شخصي في بنك آخر';
+const PURPOSES = [
+  [/شخصي في بنك آخر/, PURPOSE_SELF],
+  [/شراء\s*\/?\s*بيع بضاع/, 'شراء أو بيع بضاعة'],
+  [/تحويلات عائلية|إعالة/, 'إعالة'],
+  [/تبرع|صدقة/, 'تبرع'],
+  [/راتب|أجور/, 'رواتب'],
+];
+
+/** @returns {{iban:string, purpose:string}} */
+export function extractTransferInfo(t) {
+  const txt = String(t.details || t.desc || '').replace(/\n/g, ' ');
+  const iban = (txt.match(/SA\d{2}[A-Z0-9]{18,22}/) || txt.match(/\b\d{15}\b/) || [''])[0];
+  let purpose = '';
+  for (const [re, label] of PURPOSES) if (re.test(txt)) { purpose = label; break; }
+  return { iban, purpose };
+}
+
 /** @returns {{name:string, city:string, channel:string}} */
 export function extractMerchant(t) {
   const full = t.details || '';
@@ -185,21 +208,23 @@ const MERCHANT_RULES = [
   [/AMAZON|NOON|SHEIN|ALIEXPRESS|NAMSHI|TEMU|IHERB|TABBY|TAMARA|MADFU/i, 'shopping'],
   [/KEETA|HUNGERSTATION|JAHEZ|TALABAT|MRSOOL|NINJA|DELIVERY HERO|CHEFZ|Express Food/i, 'dining'],
   [/STC ?PAY|BARQ|URPAY|WALLET|MAHFAZA/i, 'transfers'],
-  [/LENDO|SNAP ?FIN|SULFAH|TAMWEEL|FINANC/i, 'debt'],
-  [/RESTURANT|RESTAURANT|REST\b|MATAM|MTAM|BUFFET|BUFET|CAFE|COFFEE|KAHWA|QAHWA|BURGER|PIZZA|SHAWARM|SHAWERM|BROAST|GRILL|MANDI|KABSA|FOUL|FUL\b|TAMIAH|TAAMIAH|MOAJANAT|MUAJANAT|FATEER|JUICE|BEVERAG|CHOCOLA|HALWA|BAKER|MKHBZ|MAKHBAZ|SWEET|HALAWIYAT|ICE ?CREAM|DONUT|KUDU|HERFY|ALBAIK|AL ?BAIK|MCDONALD|STARBUCKS|DUNKIN|BASKIN|SUBWAY|KFC|PAPA JOHN|DOMINO|TAZAJ|MAESTRO|BARN|DOSE|HALF ?MILLION|JAVA|CAFETERIA|MHAMES|مطعم|مطاعم|كافيه|قهوة|مخبز|حلويات|بوفيه|عصير|مشويات|بيت المعجنات/i, 'dining'],
-  [/PHARMAC|SAIDALIA|SYDLIA|NAHDI|DAWAA|AL ?DAWAA|WHITES|HOSPITAL|MUSTASHFA|CLINIC|MAJMA TIBBI|MEDICAL|DENTAL|LAB\b|MOKHTABAR|صيدلي|مستشفى|عيادة|طبي|مختبر|أسنان/i, 'health'],
-  [/MARKET|SUPERMARKET|HYPER|BAQALA|BAKALA|TAMWEEN|TMWYNAT|TAMWINAT|FOODSTUFF|GROCER|PANDA|OTHAIM|TAMIMI|CARREFOUR|LULU|DANUBE|BINDAWOOD|MANUEL|NESTO|FARM SUPER|SPAR|أسواق|بقالة|تموينات|سوبرماركت|هايبر|مواد غذائية/i, 'groceries'],
-  [/SASCO|ALDREES|AL ?DREES|PETROL|GAS ?STATION|MAHATA|BENZIN|FUEL|ARAMCO|SAPTCO|UBER|CAREEM|JEENY|TAXI|LIMO|PARKING|MAWQIF|TOLL|SPEED TRACK|CAR WASH|GHASEEL|TIRE|KAWTCH|WORKSHOP|WARSHA|SPARE PART|QITA GHIAR|محطة|وقود|بنزين|مواصلات|أجرة|غسيل سيارات|قطع غيار|ورشة/i, 'transport'],
+  // منصات التمويل الجماعي: المال يخرج استثمارًا لا استهلاكًا
+  [/RAQAMYAH|LENDO|FORUS|MANAFA|SUKUK|TADAWUL|DERAYAH|ALJAZIRA CAPITAL|رقمية|منافع/i, 'invest'],
+  [/SNAP ?FIN|SULFAH|TAMWEEL|FINANC/i, 'debt'],
+  [/RESTURANT|RESTAURANT|REST\b|MATAM|MTAM|BUFFET|BUFET|CAFE|COFFEE|KAHWA|QAHWA|BURGER|PIZZA|SHAWARM|SHAWERM|BROAST|GRILL|MANDI|KABSA|FOUL|FUL\b|TAMIAH|TAAMIAH|MOAJANAT|MUAJANAT|FATEER|JUICE|BEVERAG|CHOCOLA|HALWA|BAKER|MKHBZ|MAKHBAZ|SWEET|HALAWIYAT|ICE ?CREAM|DONUT|KUDU|HERFY|ALBAIK|AL ?BAIK|MCDONALD|STARBUCKS|DUNKIN|BASKIN|SUBWAY|KFC|PAPA JOHN|DOMINO|TAZAJ|MAESTRO|BARN|DOSE|HALF ?MILLION|JAVA|CAFETERIA|KAFETERIA|MHAMES|MANAQISH|MNAQISH|MANTO|MKHA\b|MOKHA|HALAWANI|BISCOTI|BISCUIT|ZAFARAN|CATERING|FRIED FOOD|HANEETH|HANITH|MATEAM|MTAAM|MATAAM|SHABYAT|ALSHABYAT|SNABEL|SANABEL|SHAWAYA|MALHAM|ALKALDAH|MOKHTAR ALSHAM|JAVA|DIWANIYA|مطعم|مطاعم|كافيه|قهوة|مخبز|حلويات|بوفيه|عصير|مشويات|بيت المعجنات/i, 'dining'],
+  [/PHARMAC|SAIDALIA|SYDLIA|NAHDI|DAWAA|AL ?DAWAA|WHITES|HOSPITAL|MUSTASHFA|CLINIC|MAJMA TIBBI|MEDICAL|DENTAL|OPTICAL|OPTIC|NAZARAT|LAB\b|MOKHTABAR|صيدلي|مستشفى|عيادة|طبي|مختبر|أسنان/i, 'health'],
+  [/MARKET|SUPERMARKET|HYPER|BAQALA|BAKALA|TAMWEEN|TMWYNAT|TAMWINAT|FOODSTUFF|GROCER|MHAMS|MHAMES ARD|TAHON|TAHOON|TMWENAT|TMWYNAT|TAMWINAT|\bMKT\b|KHAYRAT|BAKALAH|BQALA|PANDA|OTHAIM|TAMIMI|CARREFOUR|LULU|DANUBE|BINDAWOOD|MANUEL|NESTO|FARM SUPER|SPAR|أسواق|بقالة|تموينات|سوبرماركت|هايبر|مواد غذائية/i, 'groceries'],
+  [/SASCO|ALDREES|AL ?DREES|PETROL|GAS ?STATION|MAHATA|BENZIN|FUEL|ARAMCO|SAPTCO|UBER|CAREEM|JEENY|TAXI|LIMO|PARKING|MAWQIF|TOLL|SPEED TRACK|CAR WASH|GHASEEL|\bGS\b|DOKAN CAR|GAS ?ST|TIRE|KAWTCH|WORKSHOP|WARSHA|SPARE PART|QITA GHIAR|محطة|وقود|بنزين|مواصلات|أجرة|غسيل سيارات|قطع غيار|ورشة/i, 'transport'],
   [/LAUNDR|LAUNDER|MAGHSALA|MGHSL|DRY ?CLEAN|CLEANING|NADAFA|MAINTENANCE|SIANA|PLUMB|ELECTRIC[A-Z]* SERVICE|CARPENT|NAJAR|مغسلة|تنظيف|صيانة|سباك|نجار|كهربائي/i, 'services'],
   [/STC|MOBILY|ZAIN|SALAM|GO TELECOM|TELECOM|JAWWAL|شحن رصيد|اتصالات|موبايلي|زين|سوا/i, 'telecom'],
-  [/JARIR|\bEXTRA\b|XCITE|APPLE STORE|ITUNES|APP STORE|SAMSUNG|HUAWEI|LAPTOP|COMPUTER|MOBILE SHOP|JAWALAT|جرير|اكسترا|إلكترونيات|جوالات|حاسب/i, 'tech'],
+  [/JARIR|\bEXTRA\b|XCITE|APPLE STORE|ITUNES|APP STORE|SAMSUNG|HUAWEI|LAPTOP|COMPUTER|MOBILE SHOP|JAWALAT|COPUTAR|COMPUTAR|جرير|اكسترا|إلكترونيات|جوالات|حاسب/i, 'tech'],
   [/NETFLIX|SPOTIFY|SHAHID|OSN|STARZ|GOOGLE|APPLE\.COM|ITUNES|PLAYSTATION|XBOX|STEAM|GAME|CINEMA|MUVI|VOX|AMC|ENTERTAIN|MALAHI|THEME PARK|سينما|ترفيه|ملاهي|اشتراك/i, 'subs'],
   [/GYM|FITNESS|SPORT|NADI|PADEL|FOOTBALL|MALAB|SWIM|YOGA|BODY|نادي|رياض|لياقة|ملعب|بادل/i, 'sports'],
   [/HOTEL|FUNDUQ|RESORT|MUNTAJA|BOOKING|AIRLINE|AIRWAYS|FLYNAS|FLYADEAL|SAUDIA|AIRPORT|TRAVEL|SIYAHA|TOURISM|فندق|منتجع|طيران|مطار|سفر|سياحة/i, 'travel'],
-  [/MALL|FASHION|BOUTIQUE|CLOTH|MALABES|TEXTILE|QUMASH|SHOES|AHDIYA|PERFUME|OUD|ATTAR|OTOOR|COSMETIC|MAKEUP|BEAUTY|SALON|HALAQA|BARBER|MOZAYIN|GOLD|DHAHAB|JEWEL|MOJAWHARAT|WATCH|SAAT|FURNITURE|ATHATH|HOME ?CENTER|IKEA|SACO|TOYS|أزياء|ملابس|أحذية|عطور|عود|تجميل|صالون|حلاق|ذهب|مجوهرات|أثاث|هدايا/i, 'shopping'],
+  [/MALL|FASHION|BOUTIQUE|CLOTH|MALABES|TEXTILE|QUMASH|SHOES|AHDIYA|PERFUME|OUD|ATTAR|OTOOR|COSMETIC|MAKEUP|BEAUTY|SALON|HALAQA|BARBER|MOZAYIN|GOLD|DHAHAB|JEWEL|MOJAWHARAT|WATCH|SAAT|FURNITURE|ATHATH|MSHGHAL|MSHGHL|MASHGHAL|TAILOR|KHAYYAT|ABAYAT|ALABAYAT|FLOWER|ZOHOOR|WARD\b|CANDLE|LAMSAT|JAMAL EST|MFARSH|MFRSH|ALBARKAH LLMFARSH|HOME ?CENTER|IKEA|SACO|TOYS|أزياء|ملابس|أحذية|عطور|عود|تجميل|صالون|حلاق|ذهب|مجوهرات|أثاث|هدايا/i, 'shopping'],
   [/SCHOOL|MADRASA|ACADEMY|AKADIMIA|INSTITUTE|MAHAD|UNIVERSITY|JAMIA|TRAINING|TADREEB|COURSE|DOWRA|NURSERY|HADANA|KINDERGART|LIBRARY|MAKTABA|مدرسة|أكاديمية|معهد|جامعة|تدريب|دورة|حضانة|روضة|مكتبة/i, 'education'],
-  [/INSURANCE|TAMEEN|TAWUNIYA|BUPA|MEDGULF|WALAA|SALAMA|تأمين|بوبا|التعاونية/i, 'insurance'],
-  [/CHARIT|JAMIYA|WAQF|SADAQA|ZAKAT|EHSAN|EHSAAN|جمعية|وقف|صدقة|زكاة|إحسان|تبرع/i, 'charity'],
+  [/INSURANCE|ATZAMEEN|TAMEEN|TAAMEEN|TAWUNIYA|BUPA|MEDGULF|WALAA|SALAMA|تأمين|بوبا|التعاونية/i, 'insurance'],
+  [/CHARIT|JAMEIAH|JAMIYAH|JAMIYA|WAQF|SADAQA|ZAKAT|EHSAN|EHSAAN|جمعية|وقف|صدقة|زكاة|إحسان|تبرع/i, 'charity'],
   [/REAL ?ESTATE|AQAR|EJAR|IJAR|RENT|MASKAN|عقار|إيجار|أجرة سكن|إسكان/i, 'housing'],
   [/ELECTRICITY|SEC\b|WATER|MIYAH|NATIONAL WATER|كهرباء|المياه|الصرف الصحي/i, 'utilities'],
   [/ABSHER|MOI|MUROOR|JAWAZAT|AHWAL|MUNICIPAL|AMANA|BALADIYA|TRAFFIC FINE|MUKHALAFA|أبشر|المرور|الجوازات|الأحوال|أمانة|بلدية|مخالفة|رسوم حكومية/i, 'fees'],
@@ -211,6 +236,13 @@ export function guessCategoryFromMerchant(name) {
   for (const [re, cat] of MERCHANT_RULES) if (re.test(name)) return cat;
   return null;
 }
+
+/** المجال المستنتج من الغرض المعلن في الحوالة. */
+export const PURPOSE_CATEGORY = {
+  'شراء أو بيع بضاعة': 'shopping',
+  'إعالة': 'support',
+  'تبرع': 'charity',
+};
 
 /** المجال المستنتج من نوع العملية وحده. */
 export function defaultCategory(type) {
@@ -261,6 +293,13 @@ export function applyClassification(transactions, rules = []) {
   const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
   for (const t of transactions) {
     t.type = classifyType(t.desc, t.amount, t.bankType);
+    if (t.type === 'transfer_out' || t.type === 'transfer_in') {
+      const info = extractTransferInfo(t);
+      t.beneficiaryIban = info.iban;
+      t.purpose = info.purpose;
+      // الحوالة إلى حسابك في بنك آخر نقلُ مالٍ لا صرف
+      if (t.purpose === PURPOSE_SELF) t.type = 'internal';
+    }
     if (t.type === 'pos' || t.type === 'ecom' || t.type === 'atm_out') {
       const m = extractMerchant(t);
       t.merchant = m.name;
@@ -273,6 +312,8 @@ export function applyClassification(transactions, rules = []) {
     if (rule) { t.category = rule.category; t.categorySource = 'rule'; t.ruleId = rule.id; continue; }
     const guess = guessCategoryFromMerchant(t.merchant);
     if (guess) { t.category = guess; t.categorySource = 'merchant'; t.ruleId = null; continue; }
+    const byPurpose = PURPOSE_CATEGORY[t.purpose];
+    if (byPurpose) { t.category = byPurpose; t.categorySource = 'purpose'; t.ruleId = null; continue; }
     t.category = defaultCategory(t.type);
     t.categorySource = 'auto';
     t.ruleId = null;

@@ -304,6 +304,9 @@ export function viewFinancing(a, state) {
             يترك فائضًا شهريًا قدره <strong>${money(ev.baseSurplus, { round: true })}</strong>
             بعد إنفاقك المرصود، و<strong>${money(ev.stressSurplus, { round: true })}</strong> في اختبار الضغط.
           </p>
+          ${ev.stressBefore < 0 ? `<p class="verdict-note">تنبيه: في شهرٍ مرتفع الإنفاق بدخلٍ متحفظ، ميزانيتك تنقص
+            <strong>${money(Math.abs(ev.stressBefore), { round: true })}</strong> <em>قبل</em> هذا التمويل أصلًا —
+            أي أن أشهرك المرتفعة تُغطّى اليوم من وارد غير متكرر لا من الراتب. لذلك لا يعبر أي مبلغ حارسَ الضغط.</p>` : ''}
           <div class="checks">${ev.checks.map((c) => `
             <div class="check ${c.pass ? 'pass' : 'fail'}"><span>${c.pass ? '✔' : '✖'}</span> ${escapeHTML(c.msg)}</div>`).join('')}</div>
         </div>

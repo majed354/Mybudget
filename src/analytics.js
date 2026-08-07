@@ -246,11 +246,14 @@ export function analyze(transactions, settings = {}) {
   }
   const merchants = [...merchTotals.values()].sort((a, b) => b.total - a.total);
 
-  // ملتزم / مرن / غامض — الأساس الذي يقوم عليه اختبار الأريحية
-  const groupSeries = (test) => solid.map((m) => sum(Object.entries(m.byGroup).filter(([g]) => test(g)).map(([, v]) => v)));
-  const essSeries = groupSeries((g) => ESSENTIAL_GROUPS.has(g));
-  const flexSeries = groupSeries((g) => FLEX_GROUPS.has(g));
-  const ambSeries = groupSeries((g) => g === 'غامض');
+  // ملتزم / مرن / غامض — الأساس الذي يقوم عليه اختبار الأريحية.
+  // أقساط التمويل تُستثنى من «الملتزم» لأن محرّك الملاءة يطرحها مستقلةً
+  // بوصفها التزامًا قائمًا؛ لو بقيت هنا لطُرحت مرتين وضاع نصف الفائض.
+  const catSeries = (pred) => solid.map((m) => sum(Object.entries(m.byCategory).filter(([c]) => pred(c)).map(([, v]) => v)));
+  const groupOf = (c) => GROUP_OF[c] || 'غامض';
+  const essSeries = catSeries((c) => c !== 'debt' && ESSENTIAL_GROUPS.has(groupOf(c)));
+  const flexSeries = catSeries((c) => FLEX_GROUPS.has(groupOf(c)));
+  const ambSeries = catSeries((c) => groupOf(c) === 'غامض');
 
   const uncategorized = sum(spendTx.filter((t) => (t.category || 'other') === 'other').map((t) => -t.amount));
 
@@ -281,6 +284,8 @@ export function analyze(transactions, settings = {}) {
       total: totalSpend,
     },
     essentials: { p50: median(essSeries), p75: percentile(essSeries, 0.75), series: essSeries },
+    // الإنفاق الكلي (عدا الأقساط) في شهر مرتفع فعلي — أساس اختبار الضغط
+    stressSpend: percentile(solid.map((m, i) => essSeries[i] + flexSeries[i] + ambSeries[i]), 0.75),
     discretionary: {
       p50: median(flexSeries) + median(ambSeries),
       p75: percentile(flexSeries, 0.75) + percentile(ambSeries, 0.75),
