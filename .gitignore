@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+*.log
+# لا يُرفع أي كشف حساب أو بيانات مالية إلى المستودع
+*.xls
+*.xlsx
+*.csv
+*.pdf
+mybudget-*.json

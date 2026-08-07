@@ -1,0 +1,12 @@
+{
+  "name": "mybudget",
+  "version": "1.0.0",
+  "description": "قياس الإنفاق الشهري واختبار الملاءة عند طلب التمويل — يعمل كاملًا داخل المتصفح",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/engine.test.mjs",
+    "start": "python3 -m http.server 8777"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ميزانيتي — قياس الإنفاق واختبار الملاءة</title>
+<meta name="description" content="أداة تقيس معدل صرفك الشهري ومجالاته، وتحكم على طلب التمويل: مريح، أو مع ضغط، أو غير ملائم — من إنفاقك الفعلي لا من راتبك وحده.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<script src="vendor/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">﷼</span>
+      <div>
+        <strong>ميزانيتي</strong>
+        <small>إنفاقك بالأرقام، وقرارك بالأدلة</small>
+      </div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <p class="privacy">🔒 كل بياناتك تبقى داخل متصفحك.<br>لا خادم، ولا رفع، ولا تتبّع.</p>
+    </div>
+  </aside>
+
+  <main>
+    <div id="banner" class="banner"></div>
+    <div id="app" class="app"></div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
