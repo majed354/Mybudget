@@ -31,6 +31,7 @@ const ROUTES = {
   dashboard: { ar: 'لوحة القيادة', icon: '📊' },
   categories: { ar: 'المجالات', icon: '🧭' },
   commitments: { ar: 'الالتزامات', icon: '🔁' },
+  beneficiaries: { ar: 'المستفيدون', icon: '👥' },
   financing: { ar: 'الملاءة والتمويل', icon: '🏦' },
   transactions: { ar: 'العمليات', icon: '📜' },
   import: { ar: 'الاستيراد', icon: '📥' },
@@ -59,7 +60,7 @@ function routeFromHash() {
 
 async function reload() {
   state.transactions = await db.allTx();
-  applyClassification(state.transactions, state.rules);
+  applyClassification(state.transactions, state.rules, state.settings?.ownAccounts);
   state.analysis = state.transactions.length ? analyze(state.transactions, state.settings) : null;
   state.accountsSummary = buildAccountsSummary(state.transactions);
   recompute();
@@ -115,6 +116,7 @@ function render() {
     case 'import': html = V.viewImport(state); break;
     case 'categories': html = V.viewCategories(a, state); break;
     case 'commitments': html = V.viewCommitments(a); break;
+    case 'beneficiaries': html = V.viewBeneficiaries(a); break;
     case 'financing': html = V.viewFinancing(a, state); break;
     case 'transactions': html = V.viewTransactions(a, state); break;
     case 'settings': html = V.viewSettings(state, a); break;
@@ -166,6 +168,7 @@ function bindEvents() {
     if (action === 'drop-account') { await dropAccount(el.dataset.account); return; }
     if (action === 'toggle-exclude') { await toggleExclude(el.dataset.id); return; }
     if (action === 'del-rule') { await delRule(el.dataset.id); return; }
+    if (action === 'toggle-own') { await toggleOwn(el.dataset.kind, el.dataset.key); return; }
     if (action === 'export-json') { downloadJSON(); return; }
     if (action === 'export-csv') { downloadCSV(); return; }
     if (action === 'import-json') { pickJSON(); return; }
@@ -303,6 +306,24 @@ async function toggleExclude(id) {
 function stripRuntime(t) {
   const { type, merchant, merchantKey, city, channel, ruleId, ...keep } = t;
   return { ...keep, excluded: t.excluded, excludeReason: t.excludeReason, category: t.category, categorySource: t.categorySource };
+}
+
+/** يسم مستفيدًا بأنه حساب المستخدم (أو يرجع عن ذلك)، فيسري على كل عملياته. */
+async function toggleOwn(kind, key) {
+  const own = { ibans: [], merchants: [], ...(state.settings.ownAccounts || {}) };
+  const field = kind === 'iban' ? 'ibans' : 'merchants';
+  const set = new Set(own[field]);
+  const adding = !set.has(key);
+  if (adding) set.add(key); else set.delete(key);
+  own[field] = [...set];
+  state.settings = await saveSettings({ ownAccounts: own });
+  await reload();
+  const hit = state.transactions.filter((t) => (kind === 'iban' ? t.beneficiaryIban === key : t.merchantKey === key));
+  const total = hit.reduce((s, t) => s + (t.amount < 0 ? -t.amount : 0), 0);
+  toast(adding
+    ? `استُبعدت ${hit.length} عملية بمجموع ${money(total)} — نقلُ مال لا صرف`
+    : `أُعيدت ${hit.length} عملية إلى حساب الصرف`, adding ? 'ok' : 'warn');
+  render();
 }
 
 async function delRule(id) {

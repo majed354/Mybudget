@@ -81,6 +81,8 @@ export const DEFAULT_SETTINGS = {
     maxTerm: 72,
     minTerm: 6,
   },
+  // حسابات المستخدم ومحافظه لدى جهات أخرى: ما يذهب إليها نقلُ مالٍ لا صرف
+  ownAccounts: { ibans: [], merchants: [] },
   manual: {                 // تجاوزات يدوية على صورة الوضع المالي
     income: '', essentials: '', discretionary: '', existingInstallments: '', liquidBuffer: '',
   },

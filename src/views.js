@@ -258,7 +258,40 @@ export function viewCommitments(a) {
   </div>`;
 }
 
-// ── ٥) محرّك الملاءة ──────────────────────────────────────────────────────
+// ── ٥) المستفيدون ─────────────────────────────────────────────────────────
+export function viewBeneficiaries(a) {
+  if (!a) return empty('لا توجد بيانات.');
+  const rows = a.beneficiaries;
+  if (!rows.length) return empty('لا توجد حوالات صادرة في الكشف.');
+  const own = rows.filter((b) => b.isOwn);
+  const spend = rows.filter((b) => !b.isOwn);
+
+  const table = (list, ownMode) => `<table class="table">
+    <thead><tr><th>المستفيد</th><th>الغرض المذكور</th><th>العدد</th><th>الإجمالي</th><th>المدة</th><th></th></tr></thead>
+    <tbody>${list.map((b) => `<tr>
+      <td class="ltr ben">${escapeHTML(b.label)}
+        ${b.twoWay ? '<span class="tag ok" title="يرد منه إليك مال أيضًا — قرينة على أنه حسابك">⇄ يرد منه</span>' : ''}
+        ${b.kind === 'merchant' ? '<span class="tag amb">محفظة</span>' : ''}</td>
+      <td>${b.purposes.length ? b.purposes.map((p) => `<span class="tag">${escapeHTML(p)}</span>`).join(' ') : '<span class="muted">—</span>'}</td>
+      <td class="ltr">${num(b.count)}</td>
+      <td class="ltr">${money(b.total)}</td>
+      <td class="ltr muted nowrap">${dateLabel(b.first)} → ${dateLabel(b.last)}</td>
+      <td><button class="btn tiny ${ownMode ? '' : 'primary'}" data-action="toggle-own" data-kind="${b.kind}" data-key="${escapeHTML(b.raw)}">
+        ${ownMode ? '↩ أعِده صرفًا' : 'هذا حسابي'}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+
+  return `<div class="grid">
+    ${card('لماذا هذه الشاشة؟', `<p class="lead">الحوالة الصادرة قد تكون صرفًا حقيقيًا، وقد تكون نقلَ مالٍ إلى حسابك أو محفظتك لدى جهة أخرى.
+      البنك لا يفرّق بينهما، والفرق يقلب حكم الملاءة رأسًا على عقب.
+      وسمُك المستفيدَ مرة واحدة يسري على كل عملياته السابقة واللاحقة.</p>
+      <p class="hint">علامة «⇄ يرد منه» تعني أن مالًا وردك من الآيبان نفسه — قرينة قوية على أنه حسابك. أما «شخصي في بنك آخر» فالكشف يذكره صراحةً وقد استُبعد تلقائيًا.</p>`)}
+
+    ${own.length ? card(`موسومة بأنها حساباتك — ${money(own.reduce((s, b) => s + b.total, 0))}`, table(own, true), { cls: 'own' }) : ''}
+    ${card(`تُحتسب صرفًا — ${num(spend.length)} جهة، ${money(spend.reduce((s, b) => s + b.total, 0))}`, table(spend, false))}
+  </div>`;
+}
+
+// ── ٦) محرّك الملاءة ──────────────────────────────────────────────────────
 export function viewFinancing(a, state) {
   if (!a) return empty('استورد كشفًا أولًا ليقيس المحرّك أريحيتك من إنفاقك الفعلي.', '<button class="btn primary" data-action="go-import">استيراد</button>');
   const f = state.finance;

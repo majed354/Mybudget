@@ -294,6 +294,7 @@ export function analyze(transactions, settings = {}) {
       series: flexSeries,
     },
     categories, merchants, recurring, installments,
+    beneficiaries: buildBeneficiaries(list, settings?.ownAccounts),
     existingInstallments,
     liquidBuffer: balances.total,
     balances,
@@ -322,6 +323,53 @@ export function analyze(transactions, settings = {}) {
     },
     list,
   };
+}
+
+/**
+ * يجمع الأموال الخارجة بحسب الجهة التي ذهبت إليها: آيبان المستفيد للحوالات،
+ * واسم المحفظة لعمليات نقاط البيع (STC Pay، برق…).
+ * الغرض أن يُفسَّر المستفيد مرة واحدة لا في كل عملية.
+ */
+export function buildBeneficiaries(list, own = {}) {
+  const ownIbans = new Set(own.ibans || []);
+  const ownMerchants = new Set(own.merchants || []);
+  const WALLETS = /STC ?PAY|BARQ|URPAY|WALLET|MAHFAZA|محفظة/i;
+
+  const map = new Map();
+  const inbound = new Set();
+  for (const t of list) {
+    if (t.amount > 0 && t.beneficiaryIban) inbound.add(t.beneficiaryIban);
+  }
+
+  for (const t of list) {
+    if (t.amount >= 0) continue;
+    let key = null, kind = null, label = null;
+    if (t.beneficiaryIban) { key = t.beneficiaryIban; kind = 'iban'; label = t.beneficiaryIban; }
+    else if (t.merchantKey && WALLETS.test(t.merchant || '')) { key = `M:${t.merchantKey}`; kind = 'merchant'; label = t.merchant; }
+    if (!key) continue;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key, kind, label,
+        raw: kind === 'iban' ? t.beneficiaryIban : t.merchantKey,
+        purposes: new Set(), count: 0, total: 0, dates: [],
+        twoWay: kind === 'iban' && inbound.has(t.beneficiaryIban),
+        isOwn: kind === 'iban' ? ownIbans.has(t.beneficiaryIban) : ownMerchants.has(t.merchantKey),
+      });
+    }
+    const e = map.get(key);
+    e.count++;
+    e.total += -t.amount;
+    e.dates.push(t.date);
+    if (t.purpose) e.purposes.add(t.purpose);
+  }
+
+  return [...map.values()].map((e) => ({
+    ...e,
+    purposes: [...e.purposes],
+    first: e.dates.slice().sort()[0],
+    last: e.dates.slice().sort().pop(),
+  })).sort((a, b) => b.total - a.total);
 }
 
 /** آخر رصيد معروف لكل حساب — تقدير السيولة المتاحة. */

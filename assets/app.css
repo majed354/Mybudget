@@ -292,3 +292,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   font-size: .87rem; line-height: 1.6;
 }
+
+.card.own { border-color: var(--ok); }
+.table td.ben { font-size: .82rem; max-width: 320px; word-break: break-all; }
+.table td.ben .tag { margin-inline-start: 6px; }

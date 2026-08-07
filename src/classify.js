@@ -289,8 +289,10 @@ export function ruleMatches(rule, t) {
  * يبني حقول التصنيف لكل عملية.
  * السلطة: وسم المستخدم ← قواعده ← قاموس التجار ← نوع العملية.
  */
-export function applyClassification(transactions, rules = []) {
+export function applyClassification(transactions, rules = [], own = {}) {
   const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  const ownIbans = new Set(own.ibans || []);
+  const ownMerchants = new Set(own.merchants || []);
   for (const t of transactions) {
     t.type = classifyType(t.desc, t.amount, t.bankType);
     if (t.type === 'transfer_out' || t.type === 'transfer_in') {
@@ -298,7 +300,7 @@ export function applyClassification(transactions, rules = []) {
       t.beneficiaryIban = info.iban;
       t.purpose = info.purpose;
       // الحوالة إلى حسابك في بنك آخر نقلُ مالٍ لا صرف
-      if (t.purpose === PURPOSE_SELF) t.type = 'internal';
+      if (t.purpose === PURPOSE_SELF || ownIbans.has(t.beneficiaryIban)) t.type = 'internal';
     }
     if (t.type === 'pos' || t.type === 'ecom' || t.type === 'atm_out') {
       const m = extractMerchant(t);
@@ -306,6 +308,8 @@ export function applyClassification(transactions, rules = []) {
       t.city = m.city;
       t.channel = m.channel;
       t.merchantKey = merchantKey(m.name);
+      // شحنُ محفظتك (STC Pay، برق…) نقلُ مالٍ لا صرف — ما دمت وسمتها بذلك
+      if (t.merchantKey && ownMerchants.has(t.merchantKey)) t.type = 'internal';
     }
     if (t.categorySource === 'user') continue;
     const rule = sorted.find((r) => ruleMatches(r, t));
