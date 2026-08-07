@@ -7,6 +7,7 @@ import { analyze } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
 import { uid, groupBy, money, monthLabel } from './util.js';
 import * as Sync from './sync.js';
+import * as Inbox from './inbox.js';
 import { computeReminders, ensurePermission, fireDue } from './reminders.js';
 import * as V from './views.js';
 
@@ -29,6 +30,7 @@ const state = {
   storage: null,
   sync: { secret: null, lastAt: null, status: '', busy: false },
   reminders: [],
+  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false },
   notify: { permission: 'default', enabled: false },
   busy: false,
 };
@@ -62,8 +64,60 @@ async function boot() {
     .map(([k, v]) => `<a href="#${k}" data-route="${k}"><span>${v.icon}</span>${v.ar}</a>`).join('');
   bindEvents();
   render();
-  if (state.sync.secret) syncPull({ silent: true });
+  if (state.sync.secret) {
+    state.inbox.boxId = await Inbox.boxIdFor(state.sync.secret);
+    await syncPull({ silent: true });
+    await drainInbox({ silent: true });
+  }
   checkReminders();
+}
+
+// ── رسائل البنك ───────────────────────────────────────────────────────────
+
+/** يسحب ما وصل من إشعارات البنك ويحوّله عملياتٍ معلَّقة. */
+async function drainInbox({ silent = false } = {}) {
+  if (!state.sync.secret) return;
+  state.inbox.busy = true;
+  try {
+    const { added, failed } = await Inbox.drain(state.sync.secret, { accountLabel: 'إشعارات البنك' });
+    state.inbox.failed = failed;
+    state.inbox.status = '';
+    if (added.length) {
+      const { fresh } = dedupe(added, await db.existingHashes());
+      if (fresh.length) {
+        await db.putMany(fresh);
+        await reload();
+        toast(`وصلت ${fresh.length} عملية من إشعارات البنك`, 'ok');
+        schedulePush();
+      }
+    } else if (!silent) {
+      toast(failed.length ? `${failed.length} رسالة لم تُفهم` : 'لا رسائل جديدة', failed.length ? 'warn' : '');
+    }
+    state.inbox.lastAt = new Date().toISOString();
+  } catch (err) {
+    state.inbox.status = err.message;
+    if (!silent) toast(err.message, 'danger');
+  } finally {
+    state.inbox.busy = false;
+    render();
+  }
+}
+
+/**
+ * يطابق المعلَّق من الرسائل بما ورد في الكشف، فتُدمج العمليتان في واحدة.
+ * بلا هذه الخطوة تُحتسب كل عملية مرتين: مرةً من الإشعار ومرةً من الكشف.
+ */
+async function reconcilePending() {
+  const pending = state.transactions.filter((t) => t.source === 'sms' && t.status === 'pending');
+  if (!pending.length) return 0;
+  const booked = state.transactions.filter((t) => t.source !== 'sms');
+  const { matched } = Inbox.reconcile(pending, booked);
+  if (!matched.length) return 0;
+  const { drop, updates } = Inbox.applyReconciliation(matched);
+  for (const id of drop) await db.remove(id);
+  for (const u of updates) await db.put(stripRuntime(u));
+  await reload();
+  return drop.size;
 }
 
 // ── التذكيرات ─────────────────────────────────────────────────────────────
@@ -156,6 +210,7 @@ async function syncPull({ silent = false } = {}) {
 async function setSyncSecret(secret) {
   state.sync.secret = secret || null;
   await db.set('syncSecret', state.sync.secret);
+  state.inbox.boxId = state.sync.secret ? await Inbox.boxIdFor(state.sync.secret) : null;
 }
 
 function routeFromHash() {
@@ -275,6 +330,24 @@ function bindEvents() {
     if (action === 'toggle-exclude') { await toggleExclude(el.dataset.id); return; }
     if (action === 'del-rule') { await delRule(el.dataset.id); return; }
     if (action === 'toggle-own') { await toggleOwn(el.dataset.kind, el.dataset.key); return; }
+    if (action === 'inbox-drain') { await drainInbox(); return; }
+    if (action === 'inbox-clear') {
+      if (!confirm('مسح كل ما في صندوق الرسائل على الخادم؟')) return;
+      try { await Inbox.clearInbox(state.sync.secret); state.inbox.failed = []; toast('مُسح الصندوق', 'ok'); }
+      catch (err) { toast(err.message, 'danger'); }
+      render();
+      return;
+    }
+    if (action === 'inbox-copy-url') {
+      await navigator.clipboard.writeText(`${location.origin}/api/ingest?box=${state.inbox.boxId}`);
+      toast('نُسخ رابط الإيداع — ضعه في الاختصار', 'ok');
+      return;
+    }
+    if (action === 'reconcile') {
+      const n = await reconcilePending();
+      toast(n ? `طُوبقت ${n} عملية` : 'لا يوجد ما يُطابَق', n ? 'ok' : '');
+      return;
+    }
     if (action === 'notify-toggle') { await toggleNotifications(); return; }
     if (action === 'sync-enable') { await setSyncSecret(Sync.newSecret()); await syncPush(); render(); return; }
     if (action === 'sync-link') {
@@ -387,6 +460,8 @@ async function confirmImport() {
   await db.putMany(state.pending.fresh);
   state.pending = null;
   await reload();
+  const merged = await reconcilePending();
+  if (merged) toast(`طُوبقت ${merged} عملية معلَّقة بنظيرتها في الكشف`, 'ok');
   toast(`أُضيفت ${n} عملية`, 'ok');
   schedulePush();
   location.hash = 'dashboard';

@@ -7,6 +7,7 @@ const SHELL = [
   './src/main.js', './src/util.js', './src/store.js', './src/import.js',
   './src/classify.js', './src/analytics.js', './src/affordability.js',
   './src/charts.js', './src/views.js', './src/sync.js',
+  './src/inbox.js', './src/sms-formats.js', './src/reminders.js',
   './vendor/xlsx.full.min.js', './vendor/pdf.mjs', './vendor/pdf.worker.mjs',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png',
 ];
@@ -34,12 +35,19 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match('./index.html')));
     return;
   }
+  // «قدّم المخزَّن وحدّثه في الخلفية»: يفتح فورًا دون إنترنت،
+  // ولا يعلق على نسخة قديمة بعد كل نشر — التحديث يصل في الفتحة التالية.
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-      return res;
-    })),
+    caches.match(e.request).then((hit) => {
+      const network = fetch(e.request).then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() => hit);
+      return hit || network;
+    }),
   );
 });
 

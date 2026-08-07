@@ -307,3 +307,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 }
 .reminders { margin: 6px 0; padding-inline-start: 18px; font-size: .88rem; }
 .reminders li { margin: 4px 0; }
+
+.steps { margin: 6px 0; padding-inline-start: 20px; font-size: .88rem; }
+.steps li { margin: 5px 0; }
+.steps code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: .85em; }

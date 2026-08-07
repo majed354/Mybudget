@@ -445,6 +445,7 @@ function txTable(rows, { editable = false } = {}) {
       <td class="desc">
         <strong>${escapeHTML(t.merchant || t.bankType || (t.desc || '').slice(0, 40))}</strong>
         ${t.city ? `<span class="muted"> · ${escapeHTML(t.city)}</span>` : ''}
+        ${t.status === 'pending' ? '<span class="tag warn" title="من إشعار البنك، لم تُطابَق بالكشف بعد">معلَّقة</span>' : ''}
         ${t.excluded ? `<span class="tag amb">مستبعد: ${excuseAr(t.excludeReason)}</span>` : ''}
       </td>
       <td class="nowrap">${TYPES[t.type]?.icon || ''} ${escapeHTML(TYPES[t.type]?.ar || '')}</td>
@@ -504,6 +505,8 @@ export function viewSettings(state, a) {
         <td><button class="btn tiny danger" data-action="del-rule" data-id="${r.id}">حذف</button></td>
       </tr>`).join('')}</tbody></table>` : empty('لا قواعد بعد — وسم أي عملية من صفحة العمليات يُنشئ قاعدة تلقائيًا.'))}
 
+    ${card('ربط رسائل البنك بالجوال', inboxBody(state), { cls: state.inbox?.boxId ? 'own' : '' })}
+
     ${card('التنبيهات', notifyBody(state), { cls: state.notify?.enabled ? 'own' : '' })}
 
     ${card('المزامنة بين الأجهزة', syncBody(state), { cls: state.sync?.secret ? 'own' : '' })}
@@ -526,6 +529,42 @@ export function viewSettings(state, a) {
       </div>
       <p class="hint">كل شيء محفوظ في متصفحك (IndexedDB). مسح بيانات الموقع يمحوها، فاحتفظ بنسخة إن أردت.</p>`)}
   </div>`;
+}
+
+function inboxBody(state) {
+  const i = state.inbox || {};
+  if (!state.sync?.secret) {
+    return `<p class="lead">فعّل المزامنة أولًا — رمز صندوق الرسائل يُشتقّ من مفتاحها.</p>`;
+  }
+  const url = `${location.origin}/api/ingest?box=${i.boxId || '…'}`;
+  return `
+    <p class="lead">تصلك رسالة من البنك عند كل عملية. اجعل جوالك يمرّرها إلى هنا، فتظهر العملية في لوحتك خلال ثوانٍ
+      بدل انتظار الكشف الشهري.</p>
+    <div class="secret-box"><code class="secret">${escapeHTML(url)}</code>
+      <button class="btn tiny" data-action="inbox-copy-url">نسخ الرابط</button></div>
+
+    <h3>على الآيفون</h3>
+    <ol class="steps">
+      <li>الاختصارات ← <strong>الأتمتة</strong> ← + ← <strong>رسالة</strong>.</li>
+      <li>«المرسِل» = رقم بنك البلاد، و«يحتوي على» اتركه فارغًا. ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
+      <li>أضف إجراء <strong>Get Contents of URL</strong> بالرابط أعلاه، الطريقة <code>POST</code>،
+        والمحتوى <code>Text</code> = المتغيّر <strong>Shortcut Input</strong> (نصّ الرسالة).</li>
+    </ol>
+    <h3>على الأندرويد</h3>
+    <p class="hint">MacroDroid أو Tasker: محفّز «SMS مستلَمة» من رقم البنك ← إجراء HTTP POST إلى الرابط نفسه، والجسم نصّ الرسالة.</p>
+
+    <div class="row gap wrap">
+      <button class="btn primary" data-action="inbox-drain" ${i.busy ? 'disabled' : ''}>اسحب الرسائل الآن</button>
+      <button class="btn" data-action="reconcile">طابِق المعلَّقات بالكشف</button>
+      <button class="btn danger" data-action="inbox-clear">امسح الصندوق</button>
+    </div>
+    <p class="hint">${i.busy ? 'جارٍ…' : i.lastAt ? `آخر سحب: ${escapeHTML(new Date(i.lastAt).toLocaleString('ar-SA'))}` : 'لم يُسحب شيء بعد'}
+      ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
+    ${i.failed?.length ? `<h3>رسائل لم تُفهم (${num(i.failed.length)})</h3>
+      <ul class="reminders">${i.failed.slice(0, 5).map((m) => `<li><span class="muted">${escapeHTML(m.reason)}:</span> ${escapeHTML(String(m.text).slice(0, 90))}</li>`).join('')}</ul>
+      <p class="hint">أرسل لي نموذجًا منها لأضيف شكلها إلى المحلّل.</p>` : ''}
+    <p class="hint">🔒 نصّ الرسالة يمكث في الصندوق حتى يسحبه التطبيق فيُمسح فورًا، وما لم يُسحب يُمسح تلقائيًا بعد ٧٢ ساعة.
+      ولا يُمسّ شيء من رسائلك في جوالك.</p>`;
 }
 
 function notifyBody(state) {

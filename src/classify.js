@@ -303,7 +303,8 @@ export function applyClassification(transactions, rules = [], own = {}) {
       if (t.purpose === PURPOSE_SELF || ownIbans.has(t.beneficiaryIban)) t.type = 'internal';
     }
     if (t.type === 'pos' || t.type === 'ecom' || t.type === 'atm_out') {
-      const m = extractMerchant(t);
+      // رسالة البنك تذكر اسم التاجر صريحًا، فلا حاجة لانتزاعه من نصّ الكشف
+      const m = t.merchantHint ? { name: t.merchantHint, city: '', channel: 'SMS' } : extractMerchant(t);
       t.merchant = m.name;
       t.city = m.city;
       t.channel = m.channel;
