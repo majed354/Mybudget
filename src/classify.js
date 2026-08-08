@@ -207,7 +207,11 @@ const MERCHANT_RULES = [
   // منصات معروفة تُحسم أولًا قبل الكلمات العامة
   [/AMAZON|NOON|SHEIN|ALIEXPRESS|NAMSHI|TEMU|IHERB|TABBY|TAMARA|MADFU/i, 'shopping'],
   [/KEETA|HUNGERSTATION|JAHEZ|TALABAT|MRSOOL|NINJA|DELIVERY HERO|CHEFZ|Express Food/i, 'dining'],
-  [/STC ?PAY|BARQ|URPAY|WALLET|MAHFAZA/i, 'transfers'],
+  // شحن محفظة «برق» عند صاحب هذه النسخة إنفاقُ سفرٍ لا تحويلًا غامضًا،
+  // فيسبق قاعدة المحافظ عمدًا: بقاؤه في «غامض» يرفع نصيب الصرف المبهم
+  // فيقسو حكم الأريحية على إنفاقٍ معروفِ الوجه. غيّره إن تغيّر استعمالك له.
+  [/\bBARQ\b/i, 'travel'],
+  [/STC ?PAY|URPAY|WALLET|MAHFAZA/i, 'transfers'],
   // منصات التمويل الجماعي: المال يخرج استثمارًا لا استهلاكًا
   [/RAQAMYAH|LENDO|FORUS|MANAFA|SUKUK|TADAWUL|DERAYAH|ALJAZIRA CAPITAL|رقمية|منافع/i, 'invest'],
   [/SNAP ?FIN|SULFAH|TAMWEEL|FINANC/i, 'debt'],

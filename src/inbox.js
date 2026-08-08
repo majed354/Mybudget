@@ -5,6 +5,7 @@ import { normalizeDigits, parseNumber, toISODate, uid, hashTx } from './util.js'
 import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
   FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_PATTERNS, SELF_PARTY_RE,
+  PROMO_SENDER_RE, PROMO_TEXT_RE,
 } from './sms-formats.js';
 
 const ENDPOINT = '/api/ingest';
@@ -38,6 +39,8 @@ export async function boxIdFor(secret) {
 export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 10), sender = '' } = {}) {
   const raw = normalizeDigits(String(text || ''));
   if (!raw.trim()) return { ok: false, reason: 'رسالة فارغة' };
+  // الإعلان يُردّ من عنوانه: المصرف يرسل عروضه من مرسِلٍ منتهٍ بـ`-AD`
+  if (PROMO_SENDER_RE.test(String(sender || ''))) return { ok: false, reason: 'رسالة إعلانية لا عملية' };
 
   // نطابق على نصٍّ مُوحَّد الرسم، ونقتطع الأسماء من الأصل بالمواضع نفسها
   const F = foldArabic(raw);
@@ -54,6 +57,12 @@ export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 1
     if (v != null && v > 0) { amount = v; tag = f.tag; break; }
   }
   if (amount == null) return { ok: false, reason: 'لم يُعثر على مبلغ', bank: bank?.id, kind };
+  // رقمٌ عائم في نصٍّ تسويقي ليس مبلغَ عملية. الإشعار الصحيح يسمّي حقله
+  // («مبلغ»، «إجمالي المبلغ المستحق»، «ب:»)؛ فإن لم يُسمَّ وكانت اللغة لغة
+  // عرضٍ فهو رقم إغراءٍ لا خصم — ولا يُقيَّد على حساب المستخدم.
+  if (tag === 'loose' && PROMO_TEXT_RE.test(F)) {
+    return { ok: false, reason: 'رسالة إعلانية لا عملية', bank: bank?.id, kind };
+  }
 
   const foreign = F.match(FOREIGN_RE)?.[1] || null;
   // شراء بعملة أجنبية: الرقم الظاهر بالدولار، والمخصوم هو الإجمالي بالريال

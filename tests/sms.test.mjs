@@ -192,3 +192,28 @@ test('الحوالة العابرة إلى حسابك تُستبعد', () => {
   const t = smsToTransaction(parseBankSMS(sms), { id: 'm', text: sms });
   assert.equal(t.excluded, true);
 });
+
+// ── ما كشفته لقطة صندوق الرسائل ───────────────────────────────────────────
+// المصرف يرسل من مرسِلَين: `AlRajhiBank` للعمليات و`AlRajhiB-AD` للعروض.
+
+test('رسالة العروض من مرسِل ‎-AD‎ لا تُقيَّد عمليةً ولو حوت مبلغًا', () => {
+  const ad = 'مدَّ السفرة ودبّل نقاط مكافأة على جميع مشترياتك باستخدام بطاقتك الائتمانية واحصل على 100 ريال';
+  // قبل الحارس كانت تخرج شراءً صحيحًا بمئة ريال، فيدخل الحساب إنفاقٌ لم يقع
+  assert.equal(parseBankSMS(ad, { sender: 'AlRajhiB-AD' }).ok, false);
+  assert.equal(parseBankSMS(ad, { sender: 'Yaqoot-AD' }).ok, false);
+  // وحتى بلا اسم مرسِل: الرقم عائم ولغةُ النصّ لغةُ عرض
+  assert.equal(parseBankSMS(ad).ok, false);
+});
+
+test('المرسِل التشغيلي للمصرف نفسه لا يُردّ بحارس الإعلانات', () => {
+  const p = parseBankSMS(SMS.rajhiPos, { sender: 'AlRajhiBank' });
+  assert.equal(p.ok, true, 'الحارس على ‎-AD‎ وحده لا على اسم المصرف');
+});
+
+test('العملة قبل الرقم تُقرأ: «بمبلغ: SAR 34.51»', () => {
+  // شكلٌ من مُصدِر محفظة (Mobily Pay) كان يُهمل لعدم العثور على مبلغ
+  const p = parseBankSMS('عملية شراء دولية\nبمبلغ: SAR 34.51');
+  assert.equal(p.ok, true);
+  assert.equal(p.amount, 34.51);
+  assert.equal(p.kind, 'pos');
+});

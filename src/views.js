@@ -575,15 +575,19 @@ function inboxBody(state) {
     <div class="secret-box"><code class="secret">${escapeHTML(url)}</code>
       <button class="btn tiny" data-action="inbox-copy-url">نسخ الرابط</button></div>
 
-    <h3>على الآيفون</h3>
+    <h3>على الآيفون — أتمتةٌ لكل مصرف</h3>
     <ol class="steps">
       <li>الاختصارات ← <strong>الأتمتة</strong> ← + ← <strong>رسالة</strong>.</li>
-      <li>«المرسِل» = رقم بنك البلاد، و«يحتوي على» اتركه فارغًا. ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
+      <li>في «المرسِل» اكتب اسم المرسِل كما يصلك، وكرّر الأتمتة ثلاثًا:
+        <code>BankAlbilad</code> و<code>AlRajhiBank</code> و<code>STC Bank</code>.
+        و«يحتوي على» اتركه فارغًا، ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
       <li>أضف إجراء <strong>Get Contents of URL</strong> بالرابط أعلاه، الطريقة <code>POST</code>،
         والمحتوى <code>Text</code> = المتغيّر <strong>Shortcut Input</strong> (نصّ الرسالة).</li>
     </ol>
+    <p class="hint">⚠️ لا تُمرّر المرسِلات المنتهية بـ<code>-AD</code> مثل <code>AlRajhiB-AD</code>: تلك عروضٌ تسويقية
+      لا عمليات. والتطبيق يردّها من تلقائه، لكن تركها خارج الأتمتة أنظف.</p>
     <h3>على الأندرويد</h3>
-    <p class="hint">MacroDroid أو Tasker: محفّز «SMS مستلَمة» من رقم البنك ← إجراء HTTP POST إلى الرابط نفسه، والجسم نصّ الرسالة.</p>
+    <p class="hint">MacroDroid أو Tasker: محفّز «SMS مستلَمة» من المرسِلات الثلاثة أعلاه ← إجراء HTTP POST إلى الرابط نفسه، والجسم نصّ الرسالة.</p>
 
     <div class="row gap wrap">
       <button class="btn primary" data-action="inbox-drain" ${i.busy ? 'disabled' : ''}>اسحب الرسائل الآن</button>
