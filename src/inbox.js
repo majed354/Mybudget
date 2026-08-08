@@ -2,6 +2,7 @@
 // ثم تُطابَق بنظيرتها حين يُستورد الكشف فتصير «مؤكَّدة».
 
 import { normalizeDigits, parseNumber, toISODate, uid, hashTx } from './util.js';
+import { canonical } from './sync.js';
 import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
   FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_PATTERNS, SELF_PARTY_RE,
@@ -19,7 +20,10 @@ const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
  * فمن عرف رمز الصندوق لا يستطيع الوصول إلى نسختك المشفَّرة ولا العكس.
  */
 export async function boxIdFor(secret) {
-  const key = String(secret || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  // التطبيع من `sync.js` عينه، لا نسخةٌ منه: لو افترقت الطريقتان لافترق
+  // معرّف الصندوق بين جهازين على رمزٍ واحد، فيودع الجوال في صندوقٍ لا
+  // يقرأه الحاسب — وهو عطبٌ صامت كالذي عطّل المزامنة.
+  const key = canonical(secret);
   const material = await crypto.subtle.importKey('raw', enc.encode(key), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', salt: enc.encode(SALT), iterations: 120000, hash: 'SHA-256' }, material, 256,

@@ -44,11 +44,12 @@ export function looksLikeSecret(secret) { return pick(secret).length === SECRET_
  * وإن لم تُخرج التنقية ٣٢ محرفًا بالضبط تُركت الصيغة القديمة كما هي، لئلا
  * يتغيّر مفتاح من كان رمزه بصيغةٍ أخرى.
  */
-function normalize(secret) {
+export function canonical(secret) {
   const raw = String(secret || '').trim().toUpperCase().replace(/[\s-]/g, '');
   const picked = pick(secret);
   return picked.length === SECRET_LENGTH ? picked : raw;
 }
+const normalize = canonical;
 
 /** بصمةٌ قصيرة من معرّف التخزين: تُقارَن بالعين بين جهازين ليُعلم أهما على رمزٍ واحد. */
 export async function fingerprint(secret) {

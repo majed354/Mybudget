@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseBankSMS, smsToTransaction, reconcile, nameSimilarity, boxIdFor } from '../src/inbox.js';
+import { newSecret } from '../src/sync.js';
 
 test('رمز الصندوق يختلف عن معرّف المزامنة ولا يكشف المفتاح', async () => {
   const { encryptSnapshot } = await import('../src/sync.js');
@@ -88,4 +89,12 @@ test('nameSimilarity يقيس التداخل لا التطابق', () => {
   assert.ok(nameSimilarity('RKAEZ ALAKWAN', 'RKAEZ ALAKWAN CO') > 0.9);
   assert.equal(nameSimilarity('ABC', ''), 0);
   assert.ok(nameSimilarity('مطعم الأنوار', 'صيدلية النهدي') < 0.5);
+});
+
+test('معرّف الصندوق يتطابق بين رمزٍ نقيّ وآخر لُصق به نصّ', async () => {
+  // لو افترق التطبيع بين sync وinbox لأودع الجوال في صندوقٍ لا يقرأه الحاسب
+  const clean = newSecret();
+  const glued = `${clean} دخول أنشئ رمزًا جديدًا تابع على هذا الجهاز فقط`;
+  assert.equal(await boxIdFor(glued), await boxIdFor(clean));
+  assert.notEqual(await boxIdFor(clean), await boxIdFor(newSecret()));
 });

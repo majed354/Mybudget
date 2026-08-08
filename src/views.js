@@ -575,19 +575,23 @@ function inboxBody(state) {
     <div class="secret-box"><code class="secret">${escapeHTML(url)}</code>
       <button class="btn tiny" data-action="inbox-copy-url">نسخ الرابط</button></div>
 
-    <h3>على الآيفون — أتمتةٌ لكل مصرف</h3>
+    <h3>على الآيفون — أتمتةٌ مستقلّة لكل مصرف</h3>
     <ol class="steps">
       <li>الاختصارات ← <strong>الأتمتة</strong> ← + ← <strong>رسالة</strong>.</li>
-      <li>في «المرسِل» اكتب اسم المرسِل كما يصلك، وكرّر الأتمتة ثلاثًا:
-        <code>BankAlbilad</code> و<code>AlRajhiBank</code> و<code>STC Bank</code>.
-        و«يحتوي على» اتركه فارغًا، ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
+      <li>«المرسِل» = مرسِلٌ واحد من الثلاثة، و«يحتوي على» اتركه فارغًا،
+        ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
       <li>أضف إجراء <strong>Get Contents of URL</strong> بالرابط أعلاه، الطريقة <code>POST</code>،
-        والمحتوى <code>Text</code> = المتغيّر <strong>Shortcut Input</strong> (نصّ الرسالة).</li>
+        و<code>Request Body</code> = <strong>JSON</strong> بحقلين:
+        <br><code>text</code> = المتغيّر <strong>Shortcut Input</strong> (نصّ الرسالة)،
+        و<code>sender</code> = اسم المرسِل مكتوبًا بيدك.</li>
+      <li>كرّر الأتمتة لكل مرسِل: <code>BankAlbilad</code> و<code>AlRajhiBank</code> و<code>STC Bank</code>.</li>
     </ol>
-    <p class="hint">⚠️ لا تُمرّر المرسِلات المنتهية بـ<code>-AD</code> مثل <code>AlRajhiB-AD</code>: تلك عروضٌ تسويقية
-      لا عمليات. والتطبيق يردّها من تلقائه، لكن تركها خارج الأتمتة أنظف.</p>
+    <p class="hint">حقل <code>sender</code> ليس زينة: به يُميَّز <code>AlRajhiBank</code> عن <code>AlRajhiB-AD</code>،
+      فتُردّ العروض التسويقية ولا تدخل حسابك عمليةً لم تقع. ويكفي النصّ وحده جسمًا للطلب إن تعذّر JSON،
+      لكنك تفقد هذا التمييز. ولا تُنشئ أتمتةً لمرسِلٍ ينتهي بـ<code>-AD</code> أصلًا.</p>
     <h3>على الأندرويد</h3>
-    <p class="hint">MacroDroid أو Tasker: محفّز «SMS مستلَمة» من المرسِلات الثلاثة أعلاه ← إجراء HTTP POST إلى الرابط نفسه، والجسم نصّ الرسالة.</p>
+    <p class="hint">MacroDroid أو Tasker: محفّز «SMS مستلَمة» من المرسِلات الثلاثة ← إجراء HTTP POST إلى الرابط نفسه،
+      والجسم <code>{"text":"…","sender":"…"}</code> بنوع <code>application/json</code>.</p>
 
     <div class="row gap wrap">
       <button class="btn primary" data-action="inbox-drain" ${i.busy ? 'disabled' : ''}>اسحب الرسائل الآن</button>
