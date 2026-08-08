@@ -776,6 +776,7 @@ async function updateSettings() {
       excludeExtraordinary: !!g('a-extra')?.checked,
       ignoreLastPartialMonth: !!g('a-partial')?.checked,
       extraordinaryFactor: numOr('a-factor', 4),
+      ownTransfersSpendUntil: (g('a-own-until')?.value || '').trim(),
     },
     manual: {
       income: blankOr('m-income'),

@@ -22,8 +22,17 @@ export function markExclusions(list, settings) {
 
   // ١) التحويل الداخلي
   if (cfg.excludeInternal !== false) {
+    // نقطة التحوّل: قبلها لا تصل تفاصيل حساباتك الأخرى، فالتحويل إليها هو
+    // الصرف نفسه ولو كان في الظاهر نقلًا بين جيبيك — إذ لا يُحصى المصروف
+    // هناك بشيء آخر. وبعدها تصل التفاصيل (رسائل البنك أو كشفٌ مستورد)،
+    // فيصير التحويل نقلًا حقًّا، واحتسابه حينئذٍ يُحصي الريال مرتين.
+    // القاعدة الحاكمة: الريال يُحتسب مرة واحدة، حين يخرج من بيتك.
+    const spendUntil = String(cfg.ownTransfersSpendUntil || '');
     for (const t of list) {
-      if (t.type === 'internal') { t.excluded = true; t.excludeReason = 'internal'; }
+      if (t.type !== 'internal') continue;
+      if (spendUntil && t.date < spendUntil) continue;   // يبقى صرفًا محسوبًا
+      t.excluded = true;
+      t.excludeReason = 'internal';
     }
     // طرفا التحويل بين حسابين مستورَدين: رقم العملية نفسه، أو مبلغ متطابق بإشارتين متعاكستين
     pairUp(list, (a, b) => a.account !== b.account && a.ref && a.ref === b.ref,

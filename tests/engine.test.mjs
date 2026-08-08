@@ -402,3 +402,27 @@ test('العملة قبل الرقم لا تبتلع الإشارة السالب
   assert.equal(parseNumber('(1,200.00) SAR'), -1200, 'القوسان يبقيان سالبين');
   assert.equal(parseNumber('1,200.00-'), -1200, 'والإشارة اللاحقة كذلك');
 });
+
+test('نقطة التحوّل: التحويل إلى حساباتك صرفٌ قبلها، ونقلٌ بعدها', () => {
+  // قبل أتمتة الرسائل لا تصل تفاصيل الراجحي، فالتحويل إليه هو الصرف نفسه.
+  // وبعدها تصل المشتريات مفصَّلة، فاحتساب التحويل يُحصي الريال مرتين.
+  const rows = () => ([
+    { id: '1', date: '2026-06-10', amount: -5000, type: 'internal', account: 'البلاد', desc: 'إلى حسابي في الراجحي' },
+    { id: '2', date: '2026-09-10', amount: -5000, type: 'internal', account: 'البلاد', desc: 'إلى حسابي في الراجحي' },
+  ]);
+
+  const before = rows();
+  markExclusions(before, { analysis: { ownTransfersSpendUntil: '2026-08-01' } });
+  assert.equal(before[0].excluded, false, 'ما قبل التاريخ يبقى صرفًا محسوبًا');
+  assert.equal(before[1].excluded, true, 'وما بعده يُستبعد لأن تفصيله يصل من الرسائل');
+
+  // فارغٌ = السلوك السابق: استبعادٌ دائم
+  const always = rows();
+  markExclusions(always, { analysis: {} });
+  assert.ok(always.every((t) => t.excluded), 'بلا تاريخٍ يُستبعد الداخلي كله كما كان');
+
+  // وإطفاء الاستبعاد كليًّا يبقى مُطاعًا
+  const off = rows();
+  markExclusions(off, { analysis: { excludeInternal: false, ownTransfersSpendUntil: '2026-08-01' } });
+  assert.ok(off.every((t) => !t.excluded));
+});

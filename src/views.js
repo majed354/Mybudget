@@ -516,7 +516,15 @@ export function viewSettings(state, a) {
       <label class="chk"><input type="checkbox" id="a-rev" ${s.analysis.excludeReversals ? 'checked' : ''}> استبعاد العمليات المرتجعة</label>
       <label class="chk"><input type="checkbox" id="a-extra" ${s.analysis.excludeExtraordinary ? 'checked' : ''}> استبعاد الدفعات الاستثنائية</label>
       <label class="chk"><input type="checkbox" id="a-partial" ${s.analysis.ignoreLastPartialMonth ? 'checked' : ''}> تجاهل الأشهر ناقصة التغطية في المتوسطات</label>
-      ${numField('a-factor', 'حد الاستثنائي = كم ضعفًا من وسيط الشهر', s.analysis.extraordinaryFactor)}`)}
+      ${numField('a-factor', 'حد الاستثنائي = كم ضعفًا من وسيط الشهر', s.analysis.extraordinaryFactor)}
+      <h3>التحويل إلى حساباتك الأخرى</h3>
+      <p class="hint">القاعدة: الريال يُحتسب مرة واحدة — حين يخرج من بيتك لا حين ينتقل بين جيوبك.
+        فما لم تصلك تفاصيل حسابك الآخر، التحويل إليه <strong>هو</strong> الصرف؛ ومتى صارت تصلك من رسائل البنك
+        أو من كشفٍ مستورد، صار التحويل نقلًا لا صرفًا — واحتسابه حينئذٍ يُحصي الريال مرتين.</p>
+      <label class="field"><span>احتسب التحويل إلى حساباتي صرفًا حتى تاريخ</span>
+        <input type="date" id="a-own-until" value="${escapeHTML(s.analysis.ownTransfersSpendUntil || '')}"></label>
+      <p class="hint">اجعله <strong>يومَ تشغيلك لأتمتة الرسائل</strong>: قبله يُحتسب التحويل، وبعده تُحتسب المشتريات نفسها.
+        واتركه فارغًا ليُستبعد التحويل دائمًا — وهو الصواب متى استوردت كشوف تلك الحسابات.</p>`)}
 
     ${card('تجاوز يدوي لأرقام الملاءة', `
       <p class="hint">اتركها فارغة ليُحتسب الرقم من الكشوف. املأها إن كنت تعرف رقمًا أدق (مثل راتب سيتغيّر، أو إيجار يُدفع نقدًا).</p>
