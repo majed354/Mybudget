@@ -5,7 +5,7 @@ import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from '
 import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
 import { analyze, monthSnapshot } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
-import { uid, groupBy, money, monthLabel } from './util.js';
+import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO } from './util.js';
 import * as Sync from './sync.js';
 import * as Inbox from './inbox.js';
 import { formOf } from './form-ids.js';
@@ -90,6 +90,7 @@ async function boot() {
     .map(([k, v]) => `<a href="#${k}" data-route="${k}" ${v.primary ? 'data-primary="1"' : ''}>
       <span>${v.icon}</span><em class="nav-full">${v.ar}</em><em class="nav-short">${v.short || v.ar}</em></a>`).join('');
   bindEvents();
+  bindVersionChip();
   render();
   if (state.sync.secret) {
     state.inbox.boxId = await Inbox.boxIdFor(state.sync.secret);
@@ -137,7 +138,7 @@ async function drainInbox({ silent = false } = {}) {
       if (fresh.length) {
         await db.putMany(fresh);
         // سجلّ الحصاد: به يتأكّد المستخدم أن الأتمتة تعمل دون أن ينتظر كشفًا
-        state.inbox.log = Inbox.recordDrain(state.inbox.log, new Date().toISOString().slice(0, 10), fresh.length);
+        state.inbox.log = Inbox.recordDrain(state.inbox.log, todayISO(), fresh.length);
         await db.set('inboxLog', state.inbox.log);
         await reload();
         toast(`وصلت ${fresh.length} عملية من إشعارات البنك`, 'ok');
@@ -180,7 +181,7 @@ async function reconcilePending() {
 async function checkReminders() {
   state.reminders = computeReminders(state.analysis);
   if (!state.notify.enabled || !state.reminders.length) return;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const log = await db.get('notifyLog', { date: '', ids: [] });
   const shown = log.date === today ? log.ids : [];
   const fired = await fireDue(state.reminders, shown);
@@ -353,7 +354,7 @@ async function reload() {
   state.reminders = computeReminders(state.analysis);
   state.month = state.analysis
     ? monthSnapshot(state.analysis, {
-      today: new Date().toISOString().slice(0, 10),
+      today: todayISO(),
       limit: +state.settings?.budget?.monthlyLimit || null,
     })
     : null;
@@ -399,6 +400,25 @@ function recompute() {
   state.evaluation = evaluate(state.profile, request, state.settings.policy);
   state.plan = planTerms(state.profile, { amount: request.amount, annualRate: request.annualRate, mode: request.mode }, state.settings.policy);
   state.gap = gapAnalysis(state.profile, request, state.settings.policy);
+}
+
+/**
+ * رقم النسخة زرُّ تحديث.
+ * أكثرُ ما أربك استعمال هذا التطبيق شيفرةٌ قديمة على الجهاز: يُصلَح العطب
+ * وتبقى الصفحة على وحدات الأمس، فيُرى العطب مُصلَحًا وهو ظاهر. فالرقم
+ * ظاهرٌ ليُعرف، وزرٌّ ليُصلَح — ولا يُكتفى بفحص العامل: يُحمَّل على كل حال،
+ * فالشيفرة تُطلب من الشبكة أولًا، والتحميل يضمن أحدثها بلا انتظار.
+ */
+function bindVersionChip() {
+  const el = document.getElementById('ver');
+  if (!el) return;
+  el.textContent = `${APP_VERSION} ⟳`;
+  el.addEventListener('click', async () => {
+    el.classList.add('checking');
+    el.textContent = 'جارٍ التحديث…';
+    try { await (await navigator.serviceWorker?.getRegistration?.())?.update(); } catch { /* الشبكة قد تنقطع */ }
+    location.reload();
+  });
 }
 
 /**
@@ -541,6 +561,7 @@ function bindEvents() {
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
       return;
     }
+    if (action === 'go-tx') { location.hash = 'transactions'; return; }
     if (action === 'go-settings') { location.hash = 'settings'; return; }
     if (action === 'go-analysis') { location.hash = 'categories'; return; }
     if (action.startsWith('open-category')) {
@@ -951,7 +972,7 @@ function save(blob, name) {
   a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayISO();
 
 boot().catch((e) => {
   document.getElementById('app').innerHTML = `<div class="empty"><p>تعذّر بدء التطبيق: ${e.message}</p></div>`;

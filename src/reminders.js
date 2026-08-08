@@ -4,14 +4,14 @@
 // خادم دفع (Web Push). فهذه التذكيرات تظهر حين تفتح التطبيق أو يكون عاملًا،
 // وهو ما يناسب تذكيرًا شهريًا لا إنذارًا لحظيًا.
 
-import { monthKey, sum } from './util.js';
+import { monthKey, sum, todayISO } from './util.js';
 
 /**
  * @param {object} a  مخرجات analyze
  * @param {string} today تاريخ ISO
  * @returns {Array<{id, title, body, kind, dueDay}>}
  */
-export function computeReminders(a, today = new Date().toISOString().slice(0, 10)) {
+export function computeReminders(a, today = todayISO()) {
   if (!a) return [];
   const out = [];
   const day = Number(today.slice(8, 10));

@@ -106,6 +106,16 @@ a { color: inherit; text-decoration: none; }
 .segmented a.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
 .side-foot { margin-top: auto; }
 .head-actions { display: none; }   /* الشاشات الواسعة تعرضهما ضمن #nav */
+
+/* رقم النسخة: ظاهرٌ دائمًا، هادئٌ حتى يُقصد */
+.ver-chip {
+  font: inherit; font-size: .68rem; font-variant-numeric: tabular-nums;
+  direction: ltr; color: var(--muted); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px;
+  cursor: pointer; transition: color .15s, border-color .15s;
+}
+.ver-chip:hover { color: var(--accent); border-color: var(--accent); }
+.ver-chip.checking { opacity: .6; }
 .privacy { font-size: .74rem; color: var(--muted); background: var(--surface-2); padding: 10px; border-radius: 10px; }
 
 main { min-width: 0; display: flex; flex-direction: column; }
@@ -414,6 +424,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .brand small, .side-foot { display: none; }
   .brand-mark { width: 30px; height: 30px; font-size: 15px; border-radius: 9px; }
   .brand strong { font-size: .95rem; }
+  .ver-chip { margin-inline-start: 2px; }
 
   /* أربع وجهاتٍ ثابتة لا تُمرَّر: الشريط الذي يُسحب يُخفي وجهاته، وقيس أن
      الشاشة المفتوحة تقع خارجه. والوجهات الأخرى تُبلَغ من ترس الترويسة. */

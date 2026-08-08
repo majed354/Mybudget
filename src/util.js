@@ -1,7 +1,7 @@
 // أدوات مشتركة: تنسيق، أرقام عربية، إحصاء وصفي.
 
 /** رقم النسخة — يظهر في الإعدادات ليُعرف أي شيفرة تعمل فعلًا على الجهاز. */
-export const APP_VERSION = '1.13.0';
+export const APP_VERSION = '1.14.0';
 
 export const AR_DIGITS = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9', '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9' };
 
@@ -67,6 +67,20 @@ export function monthLabel(key) {
   return `${MONTH_NAMES[m - 1] || m} ${y}`;
 }
 export function monthKey(isoDate) { return String(isoDate).slice(0, 7); }
+
+/**
+ * تاريخ اليوم بتوقيتك أنت، لا بتوقيت غرينتش.
+ *
+ * `toISOString()` يحوّل إلى UTC، والرياض تسبقه بثلاث ساعات: فبين منتصف
+ * الليل والثالثة فجرًا يعود بتاريخ الأمس. وأثرُه ليس تجميليًّا — «اليوم ٨
+ * من ٣١» ليلةَ التاسع، والوتيرة تُقسم على يومٍ ناقص، وتذكيرُ القسط يتأخّر
+ * يومًا. وأسوأه ليلةَ أوّل الشهر: تُعرض أرقام الشهر الماضي على أنها شهرك
+ * الجاري، فيبدأ حدُّك مستهلَكًا.
+ */
+export function todayISO(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function dateLabel(iso) {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');

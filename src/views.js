@@ -1,6 +1,6 @@
 // واجهات العرض — كل دالة تُعيد HTML، والتفاعل يمرّ عبر data-action.
 
-import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION } from './util.js';
+import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION, todayISO } from './util.js';
 import { donut, hbars, monthlyChart, stackedBar, gauge, sparkline } from './charts.js';
 import { CATEGORIES, CATEGORY_MAP, TYPES } from './classify.js';
 import { VERDICT, VERDICT_AR, installmentOf, effectiveAPR } from './affordability.js';
@@ -238,9 +238,19 @@ export function viewDashboard(a, state) {
   if (a.excluded.extraordinary.length) alerts.push(`<li>استُبعدت ${num(a.excluded.extraordinary.length)} دفعة استثنائية (صرف تمويل أو مبلغ ضخم لمرة واحدة). <button class="btn tiny" data-action="go-excluded">راجعها</button></li>`);
   if (a.coverage.solid < 3) alerts.push(`<li class="warn">عدد الأشهر المكتملة ${num(a.coverage.solid)} فقط — النتائج تقديرية حتى تتوفر ثلاثة أشهر فأكثر.</li>`);
 
+  // آخر ما وقع، في صدر الشاشة: هذا سؤال اللحظة — «هل سُجّل شرائي؟» — ولا
+  // يجيبه متوسطٌ ولا وسيط. والقائمة كاملةٌ خلف زرّ، فلا تُزاحم اللوحة.
+  const latest = (a.list || []).slice()
+    .sort((x, y) => (x.date === y.date ? (x.seq || 0) - (y.seq || 0) : x.date.localeCompare(y.date)))
+    .reverse().slice(0, 5);
+
   return `
   <div class="grid">
     ${monthCard(state.month)}
+
+    ${latest.length ? card('آخر خمس عمليات', txTable(latest), {
+      actions: '<button class="btn tiny" data-action="go-tx">كل العمليات</button>',
+    }) : ''}
 
     <div class="kpi-row">
       ${kpi('الدخل الشهري المتكرر', money(a.income.median, { round: true }), { sub: a.income.salary ? `راتب ${money(a.income.salary.amount, { round: true })} يوم ${num(a.income.salary.day)}` : 'مُستنتج من الوارد المتكرر', tone: 'ok' })}
@@ -741,7 +751,7 @@ function inboxBody(state) {
  * اثنتين وسبعين ساعة يُمحى — والتطبيق لا يسحب وهو مغلق.
  */
 function inboxHarvest(i) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const week = lastDays(i.log, today, 7);
   const month = lastDays(i.log, today, 30);
   const hoursSince = i.lastAt ? (Date.now() - Date.parse(i.lastAt)) / 3600000 : null;
@@ -872,9 +882,22 @@ if (!d) {
   w.addImage(barImage(share, accent)).imageSize = new Size(320, 12);
   w.addSpacer(4);
 
+  // «٨/٣١» بين نصٍّ عربي يُقرأ مقلوبًا فيُظنّ اليومَ الحاديَ والثلاثين،
+  // و«من» تفصل الرقمين فيبقى كلٌّ في موضعه مهما كان اتجاه السطر.
   const pace = w.addStack();
   pace.addSpacer();
-  R(pace.addText('اليوم ' + d.day + '/' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected)), 10, Color.gray());
+  R(pace.addText('اليوم ' + d.day + ' من ' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected)), 10, Color.gray());
+
+  // وطزاجة الأرقام تُقال صراحةً: الأداة تعرض آخر ما نُشر، فإن لم يُفتح
+  // التطبيق اليوم فهي أرقام أمس — وسكوتُها عن ذلك يُضلّل.
+  const stamp = String(d.at || '').slice(0, 10);
+  const now = new Date();
+  const nowISO = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  if (stamp && stamp !== nowISO) {
+    const st = w.addStack();
+    st.addSpacer();
+    R(st.addText('⚠︎ أرقام ' + stamp + ' — افتح التطبيق ليتحدّث'), 9, new Color('#d97706'));
+  }
 
   w.addSpacer(6);
   const foot = w.addStack();

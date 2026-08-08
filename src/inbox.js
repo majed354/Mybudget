@@ -1,7 +1,7 @@
 // طبقة الرسائل: من إشعار البنك إلى عملية «معلَّقة» تظهر في اللوحة فورًا،
 // ثم تُطابَق بنظيرتها حين يُستورد الكشف فتصير «مؤكَّدة».
 
-import { normalizeDigits, parseNumber, toISODate, uid, hashTx } from './util.js';
+import { normalizeDigits, parseNumber, toISODate, uid, hashTx, todayISO } from './util.js';
 import { canonical } from './sync.js';
 import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
@@ -41,7 +41,7 @@ export async function boxIdFor(secret) {
  * @returns {{ok:boolean, reason?:string, bank, kind, amount, fee, merchant, self,
  *            date, time, balance, card, ref, foreign}}
  */
-export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 10), sender = '' } = {}) {
+export function parseBankSMS(text, { today = todayISO(), sender = '' } = {}) {
   const raw = normalizeDigits(String(text || ''));
   if (!raw.trim()) return { ok: false, reason: 'رسالة فارغة' };
   // الإعلان يُردّ من عنوانه: المصرف يرسل عروضه من مرسِلٍ منتهٍ بـ`-AD`
