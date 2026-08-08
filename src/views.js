@@ -798,86 +798,98 @@ export function segmented(tabs, active) {
  */
 export function scriptableSource(url) {
   return `// ميزانيتي — أداة الشاشة
-// الصقه في Scriptable، ثم أضف أداةً على الشاشة واخترها.
+// الصقه في Scriptable، سمِّه «ميزانيتي»، ثم أضف أداةً متوسطة واخترها.
+
 const URL_ = ${JSON.stringify(url)};
+const APP_ = ${JSON.stringify(location.origin)};
 
 const money = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n || 0));
+const R = (t, size, color, bold) => {
+  const x = t;
+  x.font = bold ? Font.boldSystemFont(size) : Font.systemFont(size);
+  if (color) x.textColor = color;
+  x.rightAlignText();   // العربية تُقرأ من اليمين
+  return x;
+};
+
+// الشريط يُرسم صورةً لا مكدّسات: المكدّس ذو الحجم الثابت يتفاوت عرضه بين
+// أحجام الأدوات، والرسم يضبط النسبة تمامًا.
+function barImage(share, color, w = 320, h = 12) {
+  const dc = new DrawContext();
+  dc.size = new Size(w, h);
+  dc.opaque = false;
+  dc.respectScreenScale = true;
+  const track = new Path();
+  track.addRoundedRect(new Rect(0, 0, w, h), h / 2, h / 2);
+  dc.addPath(track);
+  dc.setFillColor(new Color('#9ca3af', 0.28));
+  dc.fillPath();
+  const fw = Math.max(h, Math.min(w, w * share));
+  const fill = new Path();
+  fill.addRoundedRect(new Rect(0, 0, fw, h), h / 2, h / 2);
+  dc.addPath(fill);
+  dc.setFillColor(color);
+  dc.fillPath();
+  return dc.getImage();
+}
 
 let d = null;
 try {
-  const r = new Request(URL_);
-  r.timeoutInterval = 10;
-  const j = await r.loadJSON();
+  const req = new Request(URL_);
+  req.timeoutInterval = 10;
+  const j = await req.loadJSON();
   if (j && j.found !== false) d = j;
-} catch (e) { /* تبقى الأداة على آخر ما رُسم */ }
+} catch (e) { /* بلا اتصال: تبقى الأداة على آخر ما رُسم */ }
 
 const w = new ListWidget();
 w.setPadding(14, 14, 14, 14);
-w.url = ${JSON.stringify(location.origin)};
+w.url = APP_;   // الضغط على الأداة يفتح التطبيق
 
 if (!d) {
-  w.addText('ميزانيتي').font = Font.boldSystemFont(13);
-  const t = w.addText('لا يوجد ملخّص بعد');
-  t.font = Font.systemFont(12);
-  t.textColor = Color.gray();
+  R(w.addText('ميزانيتي'), 14, null, true);
+  R(w.addText('لا يوجد ملخّص بعد — افتح التطبيق'), 12, Color.gray());
 } else {
   const over = d.remaining < 0;
   const fast = d.pace > 1.05;
   const accent = over ? new Color('#dc2626') : fast ? new Color('#d97706') : new Color('#059669');
 
   const head = w.addStack();
-  const ttl = head.addText('صُرف هذا الشهر');
-  ttl.font = Font.systemFont(11);
-  ttl.textColor = Color.gray();
   head.addSpacer();
-  const today = head.addText('اليوم ' + money(d.todaySpent));
-  today.font = Font.systemFont(11);
-  today.textColor = Color.gray();
+  R(head.addText('صُرف هذا الشهر'), 11, Color.gray());
 
-  const big = w.addText(money(d.spent) + ' ر.س');
-  big.font = Font.boldSystemFont(26);
-  w.addSpacer(2);
+  const big = w.addStack();
+  big.addSpacer();
+  R(big.addText(money(d.spent) + ' ر.س'), 28, null, true);
 
-  const line = w.addText((over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit));
-  line.font = Font.semiboldSystemFont(12);
-  line.textColor = accent;
-
-  // شريط الاستهلاك: خطٌّ ممتلئ بقدر ما صُرف من الحدّ
-  const share = d.limit > 0 ? Math.max(0, Math.min(1, d.spent / d.limit)) : 0;
-  const bar = w.addStack();
-  bar.spacing = 0;
-  bar.addSpacer(0);
-  const full = bar.addStack();
-  full.backgroundColor = accent;
-  full.cornerRadius = 3;
-  full.size = new Size(Math.max(2, Math.round(150 * share)), 6);
-  full.addSpacer(0);
-  const rest = bar.addStack();
-  rest.backgroundColor = new Color('#9ca3af', 0.3);
-  rest.cornerRadius = 3;
-  rest.size = new Size(Math.max(0, 150 - Math.round(150 * share)), 6);
-  rest.addSpacer(0);
-  w.addSpacer(4);
-
-  const pace = w.addText('اليوم ' + d.day + '/' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected));
-  pace.font = Font.systemFont(10);
-  pace.textColor = Color.gray();
+  const rem = w.addStack();
+  rem.addSpacer();
+  R(rem.addText((over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit)), 12, accent, true);
 
   w.addSpacer(6);
-  const saved = w.addText('وُفِّر ' + money(d.saved) + ' ر.س');
-  saved.font = Font.semiboldSystemFont(12);
-  saved.textColor = d.saved >= 0 ? new Color('#059669') : new Color('#dc2626');
+  const share = d.limit > 0 ? Math.max(0, Math.min(1, d.spent / d.limit)) : 0;
+  w.addImage(barImage(share, accent)).imageSize = new Size(320, 12);
+  w.addSpacer(4);
+
+  const pace = w.addStack();
+  pace.addSpacer();
+  R(pace.addText('اليوم ' + d.day + '/' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected)), 10, Color.gray());
+
+  w.addSpacer(6);
+  const foot = w.addStack();
+  foot.addSpacer();
+  R(foot.addText('صُرف اليوم ' + money(d.todaySpent) + ' · وُفِّر ' + money(d.saved)), 11,
+    d.saved >= 0 ? new Color('#059669') : new Color('#dc2626'), true);
 
   const top = (d.top || [])[0];
   if (top) {
-    const tp = w.addText('أكبر مجال: ' + top.n + ' ' + money(top.a));
-    tp.font = Font.systemFont(10);
-    tp.textColor = Color.gray();
+    const s = w.addStack();
+    s.addSpacer();
+    R(s.addText('أكبر مجال: ' + top.n + ' ' + money(top.a)), 10, Color.gray());
   }
   if (d.last) {
-    const ls = w.addText('آخر عملية: ' + d.last.n + ' ' + money(d.last.a));
-    ls.font = Font.systemFont(10);
-    ls.textColor = Color.gray();
+    const s = w.addStack();
+    s.addSpacer();
+    R(s.addText('آخر عملية: ' + d.last.n + ' ' + money(d.last.a)), 10, Color.gray());
   }
 }
 
