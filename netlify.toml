@@ -20,3 +20,16 @@
   for = "/vendor/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# نتلفاي تُقدّم ‎.webmanifest‎ بنوع عام، ومع nosniff يرفضه المتصفح
+# فلا يُعرض «تثبيت التطبيق» ولا يُضاف إلى الشاشة الرئيسية.
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+
+# عامل الخدمة يجب ألّا يُخزَّن، وإلا بقي المستخدم على نسخة قديمة
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
