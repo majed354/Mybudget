@@ -637,6 +637,7 @@ function syncBody(state) {
     <p class="hint">⚠️ احفظه في مدير كلمات السرّ. هو مفتاح التشفير نفسه: من يملكه يقرأ بياناتك، ومن يفقده يفقدها — لا نسخة لدينا منه.</p>
     <table class="table compact mt">
       <tbody>
+        <tr><td>بصمة الرمز</td><td class="ltr"><code>${escapeHTML(s.fp || '—')}</code></td></tr>
         <tr><td>على هذا الجهاز</td><td class="ltr"><strong>${num(state.transactions.length)}</strong> عملية</td></tr>
         <tr><td>على الخادم</td><td class="ltr">${s.remoteCount == null ? '<span class="muted">لم يُفحص بعد</span>'
           : `<strong class="${s.remoteCount === state.transactions.length ? 'pos' : 'neg'}">${num(s.remoteCount)}</strong> عملية`}</td></tr>
@@ -646,6 +647,8 @@ function syncBody(state) {
     ${s.status ? `<p class="hint danger-text">${escapeHTML(s.status)}</p>` : ''}
     ${s.remoteCount != null && s.remoteCount !== state.transactions.length
       ? '<p class="hint warn-text">العددان مختلفان — اضغط «حدّث الآن» ليتطابقا.</p>' : ''}
+    <p class="hint">قارِن «بصمة الرمز» في جهازيك: إن اختلفت البصمتان فالرمزان مختلفان — وكلٌّ يفتح خزانةً غير الأخرى
+      مهما بدا الرمزان متشابهين.</p>
     <div class="row gap wrap">
       <button class="btn" data-action="sync-push" ${s.busy ? 'disabled' : ''}>حدّث الآن</button>
       <button class="btn danger" data-action="sign-out">تسجيل الخروج من هذا الجهاز</button>

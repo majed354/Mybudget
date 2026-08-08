@@ -12,16 +12,49 @@ const ITERATIONS = 210000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // بلا I O 0 1
+export const SECRET_LENGTH = 32;
+
 /** مفتاح عشوائي مقروء: ٣٢ محرفًا من أبجدية بلا محارف متشابهة. */
 export function newSecret() {
-  const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // بلا I O 0 1
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const bytes = crypto.getRandomValues(new Uint8Array(SECRET_LENGTH));
   const chars = [...bytes].map((b) => ALPHABET[b % ALPHABET.length]);
-  return chars.join('').replace(/(.{4})(?=.)/g, '$1-'); // XXXX-XXXX-…
+  return format(chars.join(''));
 }
 
+/** يعيد الرمز إلى صورته المقروءة: XXXX-XXXX-… */
+export function format(secret) {
+  const clean = pick(secret);
+  return clean.length === SECRET_LENGTH ? clean.replace(/(.{4})(?=.)/g, '$1-') : String(secret || '');
+}
+
+const pick = (s) => [...String(s || '').toUpperCase()].filter((c) => ALPHABET.includes(c)).join('');
+
+/** هل يشبه ما أُدخل رمزًا كاملًا؟ */
+export function looksLikeSecret(secret) { return pick(secret).length === SECRET_LENGTH; }
+
+/**
+ * تنقية الرمز قبل اشتقاق المفتاح.
+ *
+ * الفخّ الذي عطّل جوال المستخدم: الرمز يُلصق أحيانًا ومعه نصٌّ من الصفحة
+ * («…‎-XXXX دخول أنشئ رمزًا جديدًا تابع على هذا الجهاز فقط…»)، وكان
+ * التطبيق يشتقّ المفتاح من النصّ كاملًا فيخرج مفتاحٌ غير مفتاح الجهاز
+ * الآخر — فيجد الجوال خزانةً فارغة ويظن المستخدم أن المزامنة معطوبة.
+ * وأبجدية الرمز لاتينية، والنصّ الملتصق عربي، فالانتقاء يستخرج الرمز نقيًّا.
+ * وإن لم تُخرج التنقية ٣٢ محرفًا بالضبط تُركت الصيغة القديمة كما هي، لئلا
+ * يتغيّر مفتاح من كان رمزه بصيغةٍ أخرى.
+ */
 function normalize(secret) {
-  return String(secret || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  const raw = String(secret || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  const picked = pick(secret);
+  return picked.length === SECRET_LENGTH ? picked : raw;
+}
+
+/** بصمةٌ قصيرة من معرّف التخزين: تُقارَن بالعين بين جهازين ليُعلم أهما على رمزٍ واحد. */
+export async function fingerprint(secret) {
+  if (!secret) return '';
+  const { id } = await derive(secret);
+  return id.slice(0, 6);
 }
 
 async function derive(secret) {

@@ -2,7 +2,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newSecret, encryptSnapshot, decryptSnapshot, mergeSnapshots , planSync } from '../src/sync.js';
+import {
+  newSecret, encryptSnapshot, decryptSnapshot, mergeSnapshots, planSync,
+  looksLikeSecret, format, fingerprint,
+} from '../src/sync.js';
 import { pruneDeleted } from '../src/store.js';
 import { computeReminders, spendPace } from '../src/reminders.js';
 
@@ -11,6 +14,39 @@ test('المفتاح المولَّد عشوائي وبطول كافٍ', () => {
   assert.notEqual(a, b);
   assert.equal(a.replace(/-/g, '').length, 32);
   assert.match(a, /^[A-Z2-9-]+$/);
+});
+
+test('رمزٌ لُصق ومعه نصُّ الصفحة يفتح خزانة الرمز النقي نفسها', async () => {
+  // ما وقع فعلًا على جوال المستخدم: حُفظ الرمز ومعه نصُّ شاشة الدخول،
+  // فاشتُقّ مفتاحٌ آخر، فوجد الجوال الخادمَ فارغًا والبيانات على اللاب توب.
+  // رمزٌ مصنوع للاختبار — لا يُكتب في المستودع رمزُ أحدٍ حقيقي، فهو مفتاح تشفيره
+  const clean = newSecret();
+  const glued = `${clean} دخول أنشئ رمزًا جديدًا تابع على هذا الجهاز فقط 🔒 التشفير يجري في متصفحك.`;
+  assert.equal(looksLikeSecret(clean), true);
+  assert.equal(looksLikeSecret(glued), true, 'النصّ العربي لا يضيف محارف إلى الأبجدية اللاتينية');
+  assert.equal(format(glued), clean, 'يُحفظ في صورته النقية');
+
+  const a = await encryptSnapshot(clean, { transactions: [{ hash: 'h1' }] });
+  const b = await encryptSnapshot(glued, { transactions: [{ hash: 'h1' }] });
+  assert.equal(a.id, b.id, 'المعرّف واحد ⇒ الخزانة واحدة');
+  assert.deepEqual(await decryptSnapshot(glued, a.blob), { transactions: [{ hash: 'h1' }] });
+});
+
+test('الناقص والزائد يُردّان بدل أن يفتحا خزانة خاطئة', () => {
+  const s = newSecret();
+  assert.equal(looksLikeSecret(s.slice(0, 14)), false, 'ناقص');
+  assert.equal(looksLikeSecret(`${s}X`), false, 'زائد محرفًا');
+  assert.equal(looksLikeSecret(''), false);
+  assert.equal(looksLikeSecret(null), false);
+});
+
+test('البصمة تكشف اختلاف الرمزين بين جهازين', async () => {
+  const a = newSecret(), b = newSecret();
+  assert.equal(await fingerprint(a), await fingerprint(a), 'ثابتة للرمز الواحد');
+  assert.notEqual(await fingerprint(a), await fingerprint(b));
+  assert.match(await fingerprint(a), /^[a-f0-9]{6}$/);
+  // وصياغتا الرمز نفسه — بشرطات وبغيرها — بصمتهما واحدة
+  assert.equal(await fingerprint(a), await fingerprint(a.replace(/-/g, '').toLowerCase()));
 });
 
 test('التشفير وفكّه رحلة ذهاب وعودة', async () => {

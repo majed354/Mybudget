@@ -52,7 +52,10 @@ async function boot() {
   state.storage = await requestPersistence();
   state.settings = await getSettings();
   state.rules = await getRules();
-  state.sync.secret = await db.get('syncSecret', null);
+  // القراءة تمرّ بـsetSyncSecret لا بـdb مباشرةً: فمن حفظ رمزًا ملتصقًا به
+  // نصٌّ من الصفحة يُنقّى هنا فيعود إلى مفتاح جهازه الآخر دون أن يعيد إدخاله
+  const savedSecret = await db.get('syncSecret', null);
+  if (savedSecret) await setSyncSecret(savedSecret);
   state.sync.lastAt = await db.get('syncLastAt', null);
   state.skipSync = await db.get('skipSync', false);
   state.notify.enabled = await db.get('notifyEnabled', false);
@@ -261,8 +264,10 @@ async function syncPull({ silent = false } = {}) {
 }
 
 async function setSyncSecret(secret) {
-  state.sync.secret = secret || null;
+  // يُحفظ في صورته النقية المقروءة، فلا يبقى في التخزين نصٌّ لُصق معه
+  state.sync.secret = secret ? Sync.format(secret) : null;
   await db.set('syncSecret', state.sync.secret);
+  state.sync.fp = state.sync.secret ? await Sync.fingerprint(state.sync.secret) : '';
   state.inbox.boxId = state.sync.secret ? await Inbox.boxIdFor(state.sync.secret) : null;
 }
 
@@ -508,8 +513,13 @@ function bindEvents() {
     if (e.target.dataset.action !== 'gate-login') return;
     e.preventDefault();
     const code = document.getElementById('gate-code')?.value?.trim();
-    if (!code || code.replace(/[\s-]/g, '').length < 12) {
-      state.sync.status = 'الرمز قصير — تأكّد من نسخه كاملًا';
+    // الرمز ٣٢ محرفًا بالضبط. ومن لصق معه نصًّا من الصفحة تُنقّيه الطبقة
+    // الأدنى؛ وإنما يُردّ هنا الناقصُ والمكسور، بنصٍّ يقول ما الخلل تحديدًا.
+    if (!Sync.looksLikeSecret(code)) {
+      const n = String(code || '').replace(/[^A-Za-z0-9]/g, '').length;
+      state.sync.status = n
+        ? `الرمز غير مكتمل — ٣٢ محرفًا، وقرأنا ${n}. انسخه كاملًا من شاشة الإعدادات في جهازك الآخر.`
+        : 'أدخل رمز الدخول أولًا';
       render();
       return;
     }
@@ -519,7 +529,7 @@ function bindEvents() {
     await refresh();
     if (state.sync.status) { await setSyncSecret(null); render(); return; }
     if (state.sync.foundRemote === false && state.transactions.length === 0) {
-      toast('دخلتَ، لكن لا توجد نسخة على الخادم بعد — افتح الجهاز الذي فيه بياناتك واضغط «حدّث الآن»', 'warn');
+      toast(`دخلتَ، ولا نسخة على الخادم لهذا الرمز. بصمته ${state.sync.fp} — قارِنها ببصمة جهازك الآخر في الإعدادات: إن اختلفتا فالرمزان مختلفان، وإن تطابقتا فاضغط «حدّث الآن» هناك.`, 'warn');
     } else {
       toast(`أهلًا بك — ${state.transactions.length} عملية`, 'ok');
     }
