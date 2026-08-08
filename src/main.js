@@ -31,7 +31,7 @@ const state = {
   sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
-  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false },
+  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {} },
   notify: { permission: 'default', enabled: false },
   busy: false,
 };
@@ -58,6 +58,7 @@ async function boot() {
   if (savedSecret) await setSyncSecret(savedSecret);
   state.sync.lastAt = await db.get('syncLastAt', null);
   state.skipSync = await db.get('skipSync', false);
+  state.inbox.log = await db.get('inboxLog', {});
   state.notify.enabled = await db.get('notifyEnabled', false);
   state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
@@ -114,6 +115,9 @@ async function drainInbox({ silent = false } = {}) {
       const { fresh } = dedupe(added, await db.existingHashes());
       if (fresh.length) {
         await db.putMany(fresh);
+        // سجلّ الحصاد: به يتأكّد المستخدم أن الأتمتة تعمل دون أن ينتظر كشفًا
+        state.inbox.log = Inbox.recordDrain(state.inbox.log, new Date().toISOString().slice(0, 10), fresh.length);
+        await db.set('inboxLog', state.inbox.log);
         await reload();
         toast(`وصلت ${fresh.length} عملية من إشعارات البنك`, 'ok');
         schedulePush();

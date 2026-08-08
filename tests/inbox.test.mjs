@@ -135,3 +135,22 @@ test('سداد فاتورة البطاقة بصيغة الراجحي يُعرف 
   const t = smsToTransaction(p, { id: 'c1', text: 'x' });
   assert.equal(t.excluded, true);
 });
+
+test('سجلّ الحصاد: يجمع اليوم، ويقلّم القديم، ويعدّ الأسبوع', async () => {
+  const { recordDrain, lastDays, pruneLog } = await import('../src/inbox.js');
+  let log = {};
+  log = recordDrain(log, '2026-08-09', 3);
+  log = recordDrain(log, '2026-08-09', 2);   // سحبتان في يومٍ واحد تُجمعان
+  log = recordDrain(log, '2026-08-07', 4);
+  log = recordDrain(log, '2026-08-09', 0);   // سحبةٌ بلا جديد لا تُسجَّل
+  assert.equal(log['2026-08-09'], 5);
+  assert.equal(log['2026-08-08'], undefined);
+
+  const week = lastDays(log, '2026-08-09', 7);
+  assert.equal(week.rows.length, 7);
+  assert.equal(week.rows[0].date, '2026-08-09', 'الأحدث أولًا');
+  assert.equal(week.total, 9);
+
+  const old = pruneLog({ '2026-08-09': 1, '2025-01-01': 9 }, '2026-08-09');
+  assert.deepEqual(Object.keys(old), ['2026-08-09'], 'ما جاوز ثلاثين يومًا يُطرح');
+});

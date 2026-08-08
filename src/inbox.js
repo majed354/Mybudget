@@ -284,3 +284,36 @@ export function applyReconciliation(matched) {
   }
   return { drop, updates };
 }
+
+// ── سجلّ الحصاد ───────────────────────────────────────────────────────────
+/**
+ * كم عمليةً دخلت من الرسائل كل يوم — به يُتحقَّق أن الأتمتة تعمل.
+ *
+ * يُسجَّل المفهوم وحده لا كل ما وصل: الرسائل التي لم تُفهم تبقى في الصندوق
+ * لتُراجَع، فتُعاد في كل سحبةٍ — ولو عُدّت لتضخّم الرقم بلا عملية واحدة.
+ * والسجلّ محليّ على الجهاز لأن السحب يقع على أيّ جهازٍ فُتح أولًا.
+ */
+export function recordDrain(log, date, count) {
+  const out = { ...(log || {}) };
+  if (count > 0) out[date] = (out[date] || 0) + count;
+  return pruneLog(out, date);
+}
+
+/** لا يكبر السجلّ بلا حدّ: ثلاثون يومًا تكفي للاطمئنان. */
+export function pruneLog(log, today, days = 30) {
+  const cutoff = new Date(Date.parse(`${today}T00:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
+  const out = {};
+  for (const [d, n] of Object.entries(log || {})) if (d >= cutoff) out[d] = n;
+  return out;
+}
+
+/** آخر N يومًا مرتَّبةً من الأحدث، مع مجموع الأسبوع. */
+export function lastDays(log, today, days = 7) {
+  const base = Date.parse(`${today}T00:00:00Z`);
+  const rows = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(base - i * 86400000).toISOString().slice(0, 10);
+    rows.push({ date: d, count: (log || {})[d] || 0 });
+  }
+  return { rows, total: rows.reduce((s, r) => s + r.count, 0) };
+}

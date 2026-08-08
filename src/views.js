@@ -4,6 +4,7 @@ import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION } from 
 import { donut, hbars, monthlyChart, stackedBar, gauge, sparkline } from './charts.js';
 import { CATEGORIES, CATEGORY_MAP, TYPES } from './classify.js';
 import { VERDICT, VERDICT_AR, installmentOf, effectiveAPR } from './affordability.js';
+import { lastDays } from './inbox.js';
 
 const GROUP_COLORS = { 'ملتزم': '#6366f1', 'شبه ثابت': '#f59e0b', 'مرن': '#e11d48', 'غامض': '#94a3b8', 'ادخار': '#0d9488' };
 
@@ -608,11 +609,45 @@ function inboxBody(state) {
     </div>
     <p class="hint">${i.busy ? 'جارٍ…' : i.lastAt ? `آخر سحب: ${escapeHTML(new Date(i.lastAt).toLocaleString('ar-SA'))}` : 'لم يُسحب شيء بعد'}
       ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
+    ${inboxHarvest(i)}
     ${i.failed?.length ? `<h3>رسائل لم تُفهم (${num(i.failed.length)})</h3>
       <ul class="reminders">${i.failed.slice(0, 5).map((m) => `<li><span class="muted">${escapeHTML(m.reason)}:</span> ${escapeHTML(String(m.text).slice(0, 90))}</li>`).join('')}</ul>
       <p class="hint">أرسل لي نموذجًا منها لأضيف شكلها إلى المحلّل.</p>` : ''}
     <p class="hint">🔒 نصّ الرسالة يمكث في الصندوق حتى يسحبه التطبيق فيُمسح فورًا، وما لم يُسحب يُمسح تلقائيًا بعد ٧٢ ساعة.
       ولا يُمسّ شيء من رسائلك في جوالك.</p>`;
+}
+
+/**
+ * حصاد الرسائل بالأيام: العدد وحده يجيب «هل تعمل الأتمتة؟» دون انتظار كشف.
+ * وينبّه إن طال العهد بالسحب، لأن الصندوق ممرٌّ لا مستودع: ما لم يُسحب في
+ * اثنتين وسبعين ساعة يُمحى — والتطبيق لا يسحب وهو مغلق.
+ */
+function inboxHarvest(i) {
+  const today = new Date().toISOString().slice(0, 10);
+  const week = lastDays(i.log, today, 7);
+  const month = lastDays(i.log, today, 30);
+  const hoursSince = i.lastAt ? (Date.now() - Date.parse(i.lastAt)) / 3600000 : null;
+  const stale = hoursSince != null && hoursSince > 24;
+
+  return `
+    <h3>حصاد الرسائل على هذا الجهاز</h3>
+    <table class="table compact">
+      <tbody>
+        <tr><td>اليوم</td><td class="ltr"><strong>${num(week.rows[0].count)}</strong> عملية</td></tr>
+        <tr><td>آخر سبعة أيام</td><td class="ltr"><strong>${num(week.total)}</strong> عملية</td></tr>
+        <tr><td>آخر ثلاثين يومًا</td><td class="ltr">${num(month.total)} عملية</td></tr>
+      </tbody>
+    </table>
+    <table class="table compact mt">
+      <thead><tr><th>اليوم</th><th>ما دخل من الرسائل</th></tr></thead>
+      <tbody>${week.rows.map((r) => `<tr>
+        <td>${dateLabel(r.date)}</td>
+        <td class="ltr">${r.count ? `<strong class="pos">${num(r.count)}</strong>` : '<span class="muted">—</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    ${stale ? `<p class="hint warn-text">مضى ${num(Math.floor(hoursSince))} ساعة على آخر سحب.
+      التطبيق لا يسحب وهو مغلق، والرسالة تُمحى من الصندوق بعد ٧٢ ساعة — فافتحه مرة كل يومين على الأقل.</p>` : ''}
+    <p class="hint">هذا العدّاد لهذا الجهاز وحده: السحب يقع على أوّل جهازٍ يُفتح، والعمليات نفسها تتزامن بينهما.</p>`;
 }
 
 function notifyBody(state) {
