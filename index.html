@@ -45,8 +45,27 @@
 <div id="toast" class="toast"></div>
 <script type="module" src="src/main.js"></script>
 <script>
+  /*
+   * تحديث الشيفرة على الجهاز — أكثرُ ما أربك استعمال هذا التطبيق.
+   *
+   * عامل الخدمة يأخذ مكان سابقه فورًا (skipWaiting وclients.claim)، لكن
+   * الصفحة المفتوحة تبقى على وحداتها القديمة حتى تُحمَّل من جديد. وعلى
+   * الجوال قلّما تُغلق: يبقى المستخدم على شيفرة الأمس فيرى عطبًا أُصلح،
+   * ويظن أن الإصلاح لم ينفع. فحين يتولّى عاملٌ جديد، نُحمّل مرة واحدة.
+   * والحارس ضروري: بلا `reloaded` تدور الصفحة في حلقة تحميلٍ لا تنتهي.
+   */
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+    // ويُسأل عن جديدٍ عند كل عودة إلى التطبيق، فلا ينتظر المستخدم صدفة
+    const check = () => { if (!document.hidden) navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); };
+    document.addEventListener('visibilitychange', check);
+    addEventListener('focus', check);
   }
 </script>
 </body>

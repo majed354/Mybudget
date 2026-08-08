@@ -728,7 +728,9 @@ function inboxBody(state) {
     ${inboxHarvest(i)}
     ${i.failed?.length ? `<h3>رسائل لم تُفهم (${num(i.failed.length)})</h3>
       <ul class="reminders">${i.failed.slice(0, 5).map((m) => `<li><span class="muted">${escapeHTML(m.reason)}:</span> ${escapeHTML(String(m.text).slice(0, 90))}</li>`).join('')}</ul>
-      <p class="hint">أرسل لي نموذجًا منها لأضيف شكلها إلى المحلّل.</p>` : ''}
+      <p class="hint">تبقى في الصندوق و<strong>تُعاد محاولة تحليلها في كل سحب</strong> — فإن كان شكلها قد أُضيف
+        في نسخةٍ أحدث، حدّث الصفحة ثم اسحب فتُفهم. وإن بقيت، أرسل نموذجًا منها لأضيف شكلها.
+        <br>النسخة العاملة الآن على هذا الجهاز: <code>${escapeHTML(APP_VERSION)}</code>.</p>` : ''}
     <p class="hint">🔒 نصّ الرسالة يمكث في الصندوق حتى يسحبه التطبيق فيُمسح فورًا، وما لم يُسحب يُمسح تلقائيًا بعد ٧٢ ساعة.
       ولا يُمسّ شيء من رسائلك في جوالك.</p>`;
 }
