@@ -1,6 +1,6 @@
 // عامل الخدمة: يجعل التطبيق يفتح دون إنترنت، ويعرض التنبيهات.
 
-const CACHE = 'mybudget-v2';
+const CACHE = 'mybudget-v3';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './assets/app.css',
@@ -35,21 +35,27 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match('./index.html')));
     return;
   }
-  // «قدّم المخزَّن وحدّثه في الخلفية»: يفتح فورًا دون إنترنت،
-  // ولا يعلق على نسخة قديمة بعد كل نشر — التحديث يصل في الفتحة التالية.
-  e.respondWith(
-    caches.match(e.request).then((hit) => {
-      const network = fetch(e.request).then((res) => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-        }
-        return res;
-      }).catch(() => hit);
-      return hit || network;
-    }),
-  );
+  // المكتبات المرفقة والأيقونات لا تتغيّر: تُقدَّم من المخزن فورًا.
+  // أما شيفرة التطبيق فمن الشبكة أولًا، والمخزن احتياطٌ عند انقطاعها —
+  // إذ لا يُحتمل في أداة مالية أن يعمل المستخدم على منطقٍ قديم بعد التحديث.
+  const immutable = url.pathname.startsWith('/vendor/') || url.pathname.startsWith('/assets/icons/');
+
+  if (immutable) {
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetchAndCache(e.request)));
+    return;
+  }
+  e.respondWith(fetchAndCache(e.request).catch(() => caches.match(e.request)));
 });
+
+function fetchAndCache(request) {
+  return fetch(request).then((res) => {
+    if (res && res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+    }
+    return res;
+  });
+}
 
 // تنبيه يطلبه التطبيق (تذكير بموعد قسط أو راتب أو استيراد كشف)
 self.addEventListener('message', (e) => {

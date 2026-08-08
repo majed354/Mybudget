@@ -214,22 +214,21 @@ async function syncPull({ silent = false } = {}) {
     const plan = Sync.planSync(local, out.found ? out.snapshot : null);
     pushAfter = plan.push;
 
+    // لا «return» هنا: الرفع يجري بعد الـfinally، والخروج المبكر يقفز فوقه
     if (!out.found) {
       state.sync.status = '';
       if (!silent && !pushAfter) toast('لا توجد نسخة مخزَّنة لهذا الرمز', 'warn');
-      return;
+    } else {
+      const { merged, added } = plan;
+      await importAll(merged, { replace: true });
+      state.settings = await getSettings();
+      state.rules = await getRules();
+      state.sync.lastAt = out.updatedAt;
+      state.sync.status = '';
+      await db.set('syncLastAt', out.updatedAt);
+      await reload();
+      if (!silent || added > 0) toast(added > 0 ? `وصلت ${added} عملية من جهاز آخر` : 'بياناتك محدَّثة', 'ok');
     }
-
-    const { merged, added } = plan;
-    await importAll(merged, { replace: true });
-    state.settings = await getSettings();
-    state.rules = await getRules();
-    state.sync.lastAt = out.updatedAt;
-    state.sync.status = '';
-    await db.set('syncLastAt', out.updatedAt);
-    await reload();
-
-    if (!silent || added > 0) toast(added > 0 ? `وصلت ${added} عملية من جهاز آخر` : 'بياناتك محدَّثة', 'ok');
   } catch (err) {
     state.sync.status = err.message;
     if (!silent) toast(err.message, 'danger');
