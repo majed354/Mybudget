@@ -217,3 +217,73 @@ test('العملة قبل الرقم تُقرأ: «بمبلغ: SAR 34.51»', () 
   assert.equal(p.amount, 34.51);
   assert.equal(p.kind, 'pos');
 });
+
+// ── صيغ أغسطس ٢٠٢٦: أشكالٌ رُصدت في رسائل حقيقية ──────────────────────────
+// أخطرها ما فُهم بتاريخٍ خاطئ: تلك تدخل الحساب صامتةً، بخلاف ما لا يُفهم
+// فيُعرض للمراجعة.
+
+test('التاريخ يُرجَّح بالأقرب إلى يوم الرسالة لا بترتيبٍ مفترض', () => {
+  const at = (line) => parseBankSMS(`شراء عبر نقاط البيع\nلدى:X\nمبلغ:SAR 10\n${line}`, { today: '2026-08-08' }).date;
+  assert.equal(at('2/8/26 16:42'), '2026-08-02', 'يوم/شهر/سنة');
+  assert.equal(at('26/8/6 02:10'), '2026-08-06', 'سنة/شهر/يوم — المصرف نفسه يكتب الوجهين');
+  assert.equal(at('06-08-2026 02:18'), '2026-08-06', 'بشرطات واليوم أولًا');
+  assert.equal(at('2026-08-04 02:14'), '2026-08-04', 'سنة كاملة أولًا');
+  assert.equal(at('07/28/26 01:01'), '2026-07-28', 'شهر/يوم/سنة — لا شهر ثامنٌ وعشرون');
+  assert.equal(at('في: 2026/08/06 02:09'), '2026-08-06');
+});
+
+test('العملية المرفوضة لا تُقيَّد — ولو سمّى المصرف حقلها «مبلغ»', () => {
+  const sms = `عملية حوالة مالية صادرة مرفوضة
+السبب: خطأ في [AC03:InvalidCreditorAccountNumber]
+من حساب: xx0007
+مبلغ: SAR 4000.00
+إلى: Stc pay
+في: 06/08/2026 02:08:13`;
+  const p = parseBankSMS(sms, { sender: 'BankAlbilad' });
+  assert.equal(p.ok, false);
+  assert.match(p.reason, /مرفوضة/);
+});
+
+test('الاسترجاع النقدي واردٌ لا صرف', () => {
+  const p = parseBankSMS('بطاقة ائتمانية استرجاع نقدي :\nتم إضافة 32.50 ريال إلى محفظة الاسترجاع النقدي لبطاقة كاش باك بلس');
+  assert.equal(p.kind, 'refund');
+  assert.equal(p.amount, 32.5);
+  assert.ok(smsToTransaction(p, { id: 'r', text: 'x' }).amount > 0, 'يدخل الحساب موجبًا');
+});
+
+test('صيغ الراجحي المضغوطة: «بـSR» والمستفيد بعد لام التطويل', () => {
+  const p = parseBankSMS('شراء إنترنت بـSR 4.6\nعبر:2143;فيزا-ابل باي\nلـNational P\nرصيد:SR 6900.96\n18:58 5/8/26', { today: '2026-08-08' });
+  assert.equal(p.ok, true);
+  assert.equal(p.kind, 'ecom');
+  assert.equal(p.amount, 4.6);
+  assert.equal(p.merchant, 'National P', 'لولا التقاطها لضاع اسم التاجر');
+  assert.equal(p.date, '2026-08-05');
+});
+
+test('«عملية انترنت» و«استلام قطة» من stc تُفهمان', () => {
+  const buy = parseBankSMS('عملية انترنت\nب : SAR 16\nمن:Amazon\nبطاقة:*5106\nفي:02/08/26 07:53', { sender: 'STC Bank', today: '2026-08-08' });
+  assert.equal(buy.kind, 'ecom');
+  assert.equal(buy.amount, 16);
+  assert.equal(buy.merchant, 'Amazon');
+
+  const got = parseBankSMS('استلام قطة\nمبلغ:25.00 ر.س\nمن:OBAI ALAHDAL\nفي:06/08/26 13:11', { sender: 'STC Bank', today: '2026-08-08' });
+  assert.equal(got.kind, 'transfer_in');
+  assert.ok(smsToTransaction(got, { id: 'g', text: 'x' }).amount > 0);
+});
+
+test('نوع عملية الرسالة أوثق من استنتاجه من نصّها', async () => {
+  const { applyClassification } = await import('../src/classify.js');
+  // إشعار stc للاشتراك يذكر «رسوم العملية»، فكان المستنتِج يسمّي شراء
+  // OpenAI «رسومًا بنكية» — فتذهب اشتراكاتك إلى مجالٍ ليس مجالها
+  const sms = `شراء إنترنت
+عبر: *5106, Visa
+ب: USD 213.13
+من: OPENAI
+رسوم العملية: SAR 16.01
+إجمالي المبلغ المستحق: 816.74 SAR
+فى: 06/08/26 02:18`;
+  const t = smsToTransaction(parseBankSMS(sms, { sender: 'STC Bank', today: '2026-08-08' }), { id: 'o', text: sms });
+  applyClassification([t]);
+  assert.equal(t.type, 'ecom', 'شراءٌ إلكتروني لا رسوم');
+  assert.notEqual(t.category, 'fees');
+});

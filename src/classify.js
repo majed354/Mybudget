@@ -298,7 +298,11 @@ export function applyClassification(transactions, rules = [], own = {}) {
   const ownIbans = new Set(own.ibans || []);
   const ownMerchants = new Set(own.merchants || []);
   for (const t of transactions) {
-    t.type = classifyType(t.desc, t.amount, t.bankType);
+    // نوعُ عملية الرسالة مقروءٌ من حقولها المسمّاة، وهو أوثق من استنتاجه من
+    // نصّها كاملًا: إشعار stc للاشتراك يذكر «رسوم العملية»، فيراها المستنتِج
+    // فيسمّي شراء OpenAI «رسومًا بنكية». وكذلك «رسوم:SAR 0.58» في الحوالة.
+    // فيُقدَّم ما عرفته طبقة الرسائل، ويبقى الاستنتاج للكشوف التي لا حقول لها.
+    t.type = TYPES[t.smsKind] ? t.smsKind : classifyType(t.desc, t.amount, t.bankType);
     if (t.type === 'transfer_out' || t.type === 'transfer_in') {
       const info = extractTransferInfo(t);
       t.beneficiaryIban = info.iban;

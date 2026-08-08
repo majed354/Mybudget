@@ -5,7 +5,8 @@ import { normalizeDigits, parseNumber, toISODate, uid, hashTx } from './util.js'
 import { canonical } from './sync.js';
 import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
-  FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_PATTERNS, SELF_PARTY_RE,
+  FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_RE, resolveDate, SELF_PARTY_RE,
+  REJECTED_RE,
   PROMO_SENDER_RE, PROMO_TEXT_RE,
 } from './sms-formats.js';
 
@@ -48,6 +49,8 @@ export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 1
 
   // نطابق على نصٍّ مُوحَّد الرسم، ونقتطع الأسماء من الأصل بالمواضع نفسها
   const F = foldArabic(raw);
+  // ما لم يقع لا يُقيَّد — ويُقرأ من نصّ الرسالة لا من عجز المحلّل عن قراءتها
+  if (REJECTED_RE.test(F)) return { ok: false, reason: 'عملية مرفوضة أو ملغاة لم تقع' };
   const bank = detectBank(F, sender);
 
   let kind = null;
@@ -93,14 +96,10 @@ export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 1
 
   // ── التاريخ ──
   let date = null, time = '';
-  for (const d of DATE_PATTERNS) {
-    const m = F.match(d.re);
-    if (!m) continue;
-    date = d.order === 'ymd'
-      ? toISODate(`${m[1]}-${m[2]}-${m[3]}`)
-      : toISODate(`${m[1]}/${m[2]}/${m[3]}`);
-    time = m[4] || '';
-    if (date) break;
+  const dm = F.match(DATE_RE);
+  if (dm) {
+    date = resolveDate(+dm[1], +dm[2], +dm[3], today);
+    time = dm[4] || '';
   }
 
   if (!kind) return { ok: false, reason: 'نوع العملية غير معروف', bank: bank?.id, amount: charged };
