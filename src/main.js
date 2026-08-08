@@ -263,6 +263,30 @@ async function syncPull({ silent = false } = {}) {
   }
 }
 
+/**
+ * تبديل رمز الدخول دون مسح شيء.
+ * الرمز مفتاحُ التشفير نفسه، فمن انكشف رمزه انكشف بابُ بياناته — ولم يكن
+ * لتبديله سبيلٌ إلا «تسجيل الخروج» الذي يمحو النسخة المحلية. والترتيب هنا
+ * مقصود: يُرفع تحت الجديد أولًا، فإن فشل الرفع عاد الرمز القديم كما كان
+ * ولم تُمسّ الخزانة القديمة — فلا يبقى المستخدم بلا نسخةٍ على الخادم.
+ */
+async function rotateSecret() {
+  if (!state.sync.secret) return;
+  if (!confirm('تبديل رمز الدخول؟ يُنشأ رمزٌ جديد وتُرفع بياناتك تحته، ثم تُمحى النسخة القديمة من الخادم. وستحتاج إلى إدخال الرمز الجديد في أجهزتك الأخرى.')) return;
+  const old = state.sync.secret;
+  await setSyncSecret(Sync.newSecret());
+  await syncPush({ silent: true });
+  if (state.sync.status) {
+    await setSyncSecret(old);
+    toast(`لم يُبدَّل الرمز: ${state.sync.status}`, 'danger');
+    render();
+    return;
+  }
+  try { await Sync.remove(old); } catch { /* تبقى الخزانة القديمة، ولا يفتحها إلا من يملك رمزها */ }
+  toast('بُدّل الرمز — أدخله الآن في أجهزتك الأخرى', 'ok');
+  render();
+}
+
 async function setSyncSecret(secret) {
   // يُحفظ في صورته النقية المقروءة، فلا يبقى في التخزين نصٌّ لُصق معه
   state.sync.secret = secret ? Sync.format(secret) : null;
@@ -503,6 +527,7 @@ function bindEvents() {
       render();
       return;
     }
+    if (action === 'sync-rotate') { await rotateSecret(); return; }
     if (action === 'export-json') { downloadJSON(); return; }
     if (action === 'export-csv') { downloadCSV(); return; }
     if (action === 'import-json') { pickJSON(); return; }

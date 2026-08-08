@@ -651,6 +651,7 @@ function syncBody(state) {
       مهما بدا الرمزان متشابهين.</p>
     <div class="row gap wrap">
       <button class="btn" data-action="sync-push" ${s.busy ? 'disabled' : ''}>حدّث الآن</button>
+      <button class="btn" data-action="sync-rotate" ${s.busy ? 'disabled' : ''}>بدّل الرمز</button>
       <button class="btn danger" data-action="sign-out">تسجيل الخروج من هذا الجهاز</button>
     </div>`;
 }
