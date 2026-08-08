@@ -90,7 +90,22 @@ a { color: inherit; text-decoration: none; }
 #nav a:hover { background: var(--surface-2); color: var(--fg); }
 #nav a.active { background: var(--accent-soft); color: var(--accent); }
 #nav a span { font-size: 1rem; }
+#nav a em { font-style: normal; }
+.nav-short { display: none; }   /* الاسم القصير للشريط السفلي وحده */
+
+/* ── مبدّل الأقسام داخل الشاشة ─────────────────────────────── */
+.segmented {
+  display: flex; gap: 4px; margin: 0 0 14px;
+  background: var(--surface-2); border-radius: 12px; padding: 4px;
+}
+.segmented a {
+  flex: 1; text-align: center; padding: 8px 6px; border-radius: 9px;
+  font-size: .86rem; font-weight: 600; color: var(--muted); white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.segmented a.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
 .side-foot { margin-top: auto; }
+.head-actions { display: none; }   /* الشاشات الواسعة تعرضهما ضمن #nav */
 .privacy { font-size: .74rem; color: var(--muted); background: var(--surface-2); padding: 10px; border-radius: 10px; }
 
 main { min-width: 0; display: flex; flex-direction: column; }
@@ -107,12 +122,32 @@ main { min-width: 0; display: flex; flex-direction: column; }
 .row.gap { gap: 12px; }
 .row.wrap { flex-wrap: wrap; }
 .row.end { justify-content: flex-end; }
+.row.center { justify-content: center; align-items: center; }
+.center { text-align: center; }
 
 /* ── البطاقات ──────────────────────────────────────────────── */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .card-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 0; }
 .card-body { padding: 14px 18px 18px; }
 .card.preview { border-color: var(--accent); }
+
+/* ── البطاقة المطويّة ──────────────────────────────────────── */
+.card.fold > summary {
+  cursor: pointer; list-style: none; padding: 14px 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.card.fold > summary::-webkit-details-marker { display: none; }
+.card.fold > summary h2 { margin: 0; }
+.card.fold > summary .hint { margin-inline-start: auto; }
+/* سهمٌ يدور: إشارةٌ صامتة أن تحت العنوان مزيدًا */
+.card.fold > summary::after {
+  content: '⌄'; margin-inline-start: 6px; color: var(--muted);
+  font-size: 1.1rem; line-height: 1; transition: transform .2s;
+}
+.card.fold[open] > summary::after { transform: rotate(180deg); }
+.card.fold[open] > summary { border-bottom: 1px solid var(--line); }
+.card.fold > summary:hover { background: var(--surface-2); }
+.card.fold > .card-body { padding-top: 14px; }
 
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .kpi {
@@ -266,8 +301,50 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 }
 .dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
 .dz-icon { font-size: 30px; }
-.filters { gap: 10px; }
+.filters { gap: 8px; }
 .filters input, .filters select { flex: 1 1 160px; min-width: 130px; }
+/* على الجوال: البحث سطرٌ كامل، والقائمتان جنبًا إلى جنب، والخياران شارتان
+   لا سطرين — كانت المرشِّحات وحدها تملأ الشاشة قبل أن تظهر عملية واحدة */
+@media (max-width: 900px) {
+  .filters input[type="search"] { flex: 1 1 100%; }
+  .filters select { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .filters .chk {
+    flex: 1 1 calc(50% - 4px); white-space: nowrap; justify-content: center;
+    background: var(--surface-2); border-radius: 10px; padding: 7px 8px; font-size: .8rem;
+  }
+}
+
+/* ── قائمة العمليات ────────────────────────────────────────── */
+.tx-list { list-style: none; margin: 0; padding: 0; }
+.tx-row {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center;
+  padding: 10px 2px; border-bottom: 1px solid var(--line);
+}
+.tx-row:last-child { border-bottom: 0; }
+.tx-row.excluded { opacity: .55; }
+.tx-main { flex: 1 1 100%; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; min-width: 0; }
+.tx-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-amount { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 700; }
+.tx-meta {
+  flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center;
+  font-size: .74rem; color: var(--muted); min-width: 0;
+}
+.tx-meta .tx-acc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12ch; }
+.tx-actions { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+.tx-actions .cat-select { font-size: .78rem; padding: 4px 6px; max-width: 9.5rem; }
+
+@media (min-width: 901px) {
+  /* على الشاشة الواسعة يصير الصفّ سطرًا واحدًا: العنوان يتمدّد وما بعده يثبت */
+  .tx-row { flex-wrap: nowrap; gap: 14px; }
+  .tx-main { flex: 1 1 auto; justify-content: flex-start; gap: 14px; min-width: 0; }
+  .tx-title { flex: 1 1 auto; }
+  .tx-amount { order: 2; min-width: 8.5rem; text-align: end; }
+  .tx-meta { flex: 0 0 auto; flex-wrap: nowrap; }
+  .tx-meta .tx-acc { max-width: 14ch; }
+  /* «التحليل» غلافٌ للجوال: على الشاشة الواسعة تُعرض أقسامه الثلاثة صراحةً،
+     فعرضُه معها تكرارٌ يزيد الوجهات بلا فائدة */
+  #nav a[data-route="analysis"] { display: none; }
+}
 
 /* ── التنبيه العائم ────────────────────────────────────────── */
 .toast {
@@ -289,7 +366,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
  * ثابتًا: يبلغه الإبهام، ولا يغيب، ويُمرَّر إليه النشط تلقائيًّا.
  */
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; }
+  /* صفّان لا فائض موزَّع: بلا `auto 1fr` توزّع الشبكة ما فضل عن المحتوى على
+     الصفّين بالتساوي، فتنتفخ الترويسة (قيست ١٤٦ بكسل لمحتوى ٣٤) */
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidebar {
     position: sticky; top: 0; z-index: 30; height: auto;
     flex-direction: row; align-items: center; gap: 10px;
@@ -300,23 +379,32 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .brand-mark { width: 30px; height: 30px; font-size: 15px; border-radius: 9px; }
   .brand strong { font-size: .95rem; }
 
+  /* أربع وجهاتٍ ثابتة لا تُمرَّر: الشريط الذي يُسحب يُخفي وجهاته، وقيس أن
+     الشاشة المفتوحة تقع خارجه. والوجهات الأخرى تُبلَغ من ترس الترويسة. */
   #nav {
     position: fixed; inset-inline: 0; bottom: 0; z-index: 40;
     flex-direction: row; gap: 0;
     background: var(--surface); border-top: 1px solid var(--line);
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-    overflow-x: auto; overscroll-behavior-x: contain;
-    scroll-snap-type: x proximity; scrollbar-width: none;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     box-shadow: 0 -2px 16px rgba(16, 24, 40, .07);
   }
-  #nav::-webkit-scrollbar { display: none; }
-  #nav a {
-    flex: 0 0 auto; scroll-snap-align: center;
-    flex-direction: column; gap: 1px;
-    min-width: 66px; padding: 6px 8px; border-radius: 12px;
-    font-size: .66rem; white-space: nowrap;
+  #nav a { display: none; }                      /* الثانوية تختفي من السفليّ */
+  #nav a[data-primary] {
+    display: flex; flex: 1 1 0; min-width: 0;
+    flex-direction: column; gap: 1px; align-items: center;
+    padding: 6px 4px; border-radius: 12px;
+    font-size: .68rem; white-space: nowrap;
   }
   #nav a span { font-size: 1.15rem; line-height: 1.15; }
+  .nav-full { display: none; }
+  .nav-short { display: inline; }
+  /* وجهتان نادرتان (الاستيراد والإعدادات) في ترويسةٍ رفيعة لا في الشريط */
+  .head-actions { display: flex; gap: 4px; margin-inline-start: auto; }
+  .head-actions a {
+    display: grid; place-items: center; width: 34px; height: 34px;
+    border-radius: 10px; font-size: 1.05rem; background: var(--surface-2);
+  }
+  .head-actions a.active { background: var(--accent-soft); }
 
   .two-col { grid-template-columns: 1fr; }
   /* حشوةٌ سفلية بقدر الشريط، وإلّا اختبأ آخر سطرٍ تحته فتعذّر بلوغه */
@@ -325,6 +413,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .toast { inset-block-end: calc(78px + env(safe-area-inset-bottom)); }
   .hbar-row { grid-template-columns: 110px 1fr 92px; font-size: .8rem; }
   .table { font-size: .8rem; }
+  /* الجدول العريض يُمرَّر داخل بطاقته لا أن يجرّ الصفحة كلها عرضًا
+     (قيس جدول المجالات ٥٣٣ بكسل داخل ٣٤٥) */
+  .card-body { overflow-x: auto; }
 }
 
 @media print {

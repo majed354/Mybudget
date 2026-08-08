@@ -18,10 +18,25 @@ function kpi(label, value, { sub = '', tone = '', hint = '' } = {}) {
 }
 
 function card(title, body, { actions = '', cls = '' } = {}) {
+  // عنوانٌ فارغ = لا ترويسة: تكرار عنوان الشاشة داخل بطاقتها الوحيدة يأكل
+  // من الشاشة الصغيرة بلا فائدة
   return `<section class="card ${cls}">
-    <header class="card-head"><h2>${escapeHTML(title)}</h2>${actions}</header>
+    ${title ? `<header class="card-head"><h2>${escapeHTML(title)}</h2>${actions}</header>` : ''}
     <div class="card-body">${body}</div>
   </section>`;
+}
+
+/**
+ * بطاقة تُفتح بالطلب. لشاشةٍ أقسامُها ثمانية — قيست الإعدادات ٦٫٥ شاشة تمرير
+ * على الجوال — الطيّ يجعل الأقسام كلها في مرأى واحد، فيُختار المقصود بنقرة
+ * بدل البحث عنه بالتمرير. و`<details>` أصلٌ في المتصفح: يعمل بلا شيفرة،
+ * ويبقى قابلًا للبحث بـCtrl+F، وتفتحه قارئات الشاشة.
+ */
+function foldable(title, body, { open = false, hint = '' } = {}) {
+  return `<details class="card fold" ${open ? 'open' : ''}>
+    <summary class="card-head"><h2>${escapeHTML(title)}</h2>${hint ? `<span class="hint">${escapeHTML(hint)}</span>` : ''}</summary>
+    <div class="card-body">${body}</div>
+  </details>`;
 }
 
 function empty(msg, action = '') {
@@ -450,10 +465,15 @@ export function viewTransactions(a, state) {
     const qq = q.toLowerCase();
     rows = rows.filter((t) => `${t.desc} ${t.merchant || ''} ${t.ref || ''} ${t.bankType || ''}`.toLowerCase().includes(qq));
   }
-  rows = rows.slice().sort((x, y) => y.date.localeCompare(x.date)).slice(0, 300);
+  rows = rows.slice().sort((x, y) => y.date.localeCompare(x.date));
+  // ثلاثمئة صفٍّ دفعةً واحدة قيست ٤٣٬٧٦٨ بكسل على الجوال — أربعٌ وخمسون شاشة
+  // تمريرٍ لا يبلغ آخرها أحد. تُعرض دفعةٌ ويُطلب ما بعدها.
+  const total = rows.length;
+  const limit = state.txLimit || TX_PAGE;
+  const shown = rows.slice(0, limit);
 
   return `<div class="grid">
-    ${card('العمليات', `
+    ${card('', `
       <div class="row wrap gap filters">
         <input id="q" type="search" placeholder="ابحث باسم تاجر أو وصف أو رقم عملية…" value="${escapeHTML(q)}">
         <select id="f-cat"><option value="">كل المجالات</option>${CATEGORIES.map((c) => `<option value="${c.id}" ${state.filter.cat === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}</select>
@@ -461,35 +481,50 @@ export function viewTransactions(a, state) {
         <label class="chk"><input type="checkbox" id="f-uncat" ${state.filter.onlyUncat ? 'checked' : ''}> غير المصنّف فقط</label>
         <label class="chk"><input type="checkbox" id="f-exc" ${state.filter.onlyExcluded ? 'checked' : ''}> المستبعد فقط</label>
       </div>
+      ${txTable(shown, { editable: true })}
       <p class="hint">وسمُك لعملية يُنشئ قاعدة تُطبَّق على كل عمليات التاجر نفسه — فتصنيف مئة عملية يستغرق دقائق.</p>
-      ${txTable(rows, { editable: true })}
+      ${total > shown.length ? `<div class="row gap center mt">
+        <button class="btn" data-action="tx-more">اعرض ${num(Math.min(TX_PAGE, total - shown.length))} عملية أخرى</button>
+        <span class="hint">ظهرت ${num(shown.length)} من ${num(total)}</span>
+      </div>` : total ? `<p class="hint center">هذه كل العمليات المطابقة (${num(total)}).</p>` : ''}
     `)}
   </div>`;
 }
 
+/** حجم الدفعة الواحدة في قائمة العمليات. */
+export const TX_PAGE = 40;
+
+/**
+ * قائمة العمليات صفوفًا لا جدولًا.
+ * قيس الجدول على ٣٧٥ بكسل: خمسة أعمدة تتزاحم فيلتفّ نصّ كل خلية، فيبلغ
+ * الصفّ ١٤٤ بكسل — خمسةُ صفوفٍ في الشاشة. والصفّ هنا سطران: التاجرُ والمبلغ
+ * في الأعلى لأنهما المقروءان، وما دونهما بيانٌ مساعد. ويصير سطرًا واحدًا
+ * على الشاشات الواسعة، فلا حاجة إلى بنيتين ولا إلى تكرار في DOM.
+ */
 function txTable(rows, { editable = false } = {}) {
   if (!rows.length) return empty('لا توجد عمليات مطابقة.');
-  return `<table class="table tx">
-    <thead><tr><th>التاريخ</th><th>الحساب</th><th>التاجر / الوصف</th><th>النوع</th><th>المبلغ</th>${editable ? '<th>المجال</th><th></th>' : '<th>المجال</th>'}</tr></thead>
-    <tbody>${rows.map((t) => `<tr class="${t.excluded ? 'excluded' : ''}">
-      <td class="ltr nowrap">${dateLabel(t.date)}</td>
-      <td class="muted">${escapeHTML(t.account)}</td>
-      <td class="desc">
-        <strong>${escapeHTML(t.merchant || t.bankType || (t.desc || '').slice(0, 40))}</strong>
-        ${t.city ? `<span class="muted"> · ${escapeHTML(t.city)}</span>` : ''}
+  return `<ul class="tx-list">${rows.map((t) => `
+    <li class="tx-row ${t.excluded ? 'excluded' : ''}">
+      <div class="tx-main">
+        <span class="tx-title">${escapeHTML(t.merchant || t.bankType || (t.desc || '').slice(0, 60))}</span>
+        <span class="tx-amount ltr ${t.amount < 0 ? 'neg' : 'pos'}">${money(t.amount)}</span>
+      </div>
+      <div class="tx-meta">
+        <span class="ltr">${dateLabel(t.date)}</span>
+        <span>${TYPES[t.type]?.icon || ''} ${escapeHTML(TYPES[t.type]?.ar || '')}</span>
+        ${t.city ? `<span>${escapeHTML(t.city)}</span>` : ''}
+        <span class="tx-acc">${escapeHTML(t.account)}</span>
         ${t.status === 'pending' ? '<span class="tag warn" title="من إشعار البنك، لم تُطابَق بالكشف بعد">معلَّقة</span>' : ''}
         ${t.excluded ? `<span class="tag amb">مستبعد: ${excuseAr(t.excludeReason)}</span>` : ''}
-      </td>
-      <td class="nowrap">${TYPES[t.type]?.icon || ''} ${escapeHTML(TYPES[t.type]?.ar || '')}</td>
-      <td class="ltr nowrap ${t.amount < 0 ? 'neg' : 'pos'}">${money(t.amount)}</td>
-      <td>${editable ? `<select class="cat-select" data-action="set-cat" data-id="${t.id}">
+      </div>
+      <div class="tx-actions">
+        ${editable ? `<select class="cat-select" data-action="set-cat" data-id="${t.id}" aria-label="مجال العملية">
             ${CATEGORIES.map((c) => `<option value="${c.id}" ${(t.category || 'other') === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}
-          </select>` : escapeHTML(CATEGORY_MAP[t.category]?.ar || '—')}
+          </select>` : `<span class="tag">${escapeHTML(CATEGORY_MAP[t.category]?.ar || '—')}</span>`}
         ${t.categorySource === 'user' ? '<span class="dot user" title="وسم يدوي"></span>' : t.categorySource === 'rule' ? '<span class="dot rule" title="بقاعدة"></span>' : ''}
-      </td>
-      ${editable ? `<td><button class="btn tiny" data-action="toggle-exclude" data-id="${t.id}" title="استبعاد/إرجاع">${t.excluded ? '↩' : '⊘'}</button></td>` : ''}
-    </tr>`).join('')}</tbody>
-  </table>`;
+        ${editable ? `<button class="btn tiny" data-action="toggle-exclude" data-id="${t.id}" title="استبعاد/إرجاع">${t.excluded ? '↩' : '⊘'}</button>` : ''}
+      </div>
+    </li>`).join('')}</ul>`;
 }
 
 function excuseAr(r) {
@@ -501,7 +536,7 @@ export function viewSettings(state, a) {
   const s = state.settings;
   const rules = state.rules || [];
   return `<div class="grid">
-    ${card('حُرّاس القرار', `
+    ${foldable('حُرّاس القرار', `
       <p class="hint">هذه السقوف هي ما يفصل «مريح» عن «مع ضغط» عن «غير ملائم». عدّلها لتوافق سياستك.</p>
       <div class="row wrap gap">
         ${numField('p-dbrCap', 'سقف نسبة الاستقطاع ٪', s.policy.dbrCap * 100)}
@@ -512,7 +547,7 @@ export function viewSettings(state, a) {
         ${numField('p-maxTerm', 'أقصى مدة تُدرس (شهر)', s.policy.maxTerm)}
       </div>`)}
 
-    ${card('معالجة البيانات', `
+    ${foldable('معالجة البيانات', `
       <label class="chk"><input type="checkbox" id="a-internal" ${s.analysis.excludeInternal ? 'checked' : ''}> استبعاد التحويل بين حساباتي</label>
       <label class="chk"><input type="checkbox" id="a-rev" ${s.analysis.excludeReversals ? 'checked' : ''}> استبعاد العمليات المرتجعة</label>
       <label class="chk"><input type="checkbox" id="a-extra" ${s.analysis.excludeExtraordinary ? 'checked' : ''}> استبعاد الدفعات الاستثنائية</label>
@@ -527,7 +562,7 @@ export function viewSettings(state, a) {
       <p class="hint">اجعله <strong>يومَ تشغيلك لأتمتة الرسائل</strong>: قبله يُحتسب التحويل، وبعده تُحتسب المشتريات نفسها.
         واتركه فارغًا ليُستبعد التحويل دائمًا — وهو الصواب متى استوردت كشوف تلك الحسابات.</p>`)}
 
-    ${card('تجاوز يدوي لأرقام الملاءة', `
+    ${foldable('تجاوز يدوي لأرقام الملاءة', `
       <p class="hint">اتركها فارغة ليُحتسب الرقم من الكشوف. املأها إن كنت تعرف رقمًا أدق (مثل راتب سيتغيّر، أو إيجار يُدفع نقدًا).</p>
       <div class="row wrap gap">
         ${numField('m-income', 'الدخل الشهري', s.manual.income, 'من الكشف')}
@@ -537,7 +572,7 @@ export function viewSettings(state, a) {
         ${numField('m-buffer', 'السيولة المتاحة', s.manual.liquidBuffer, 'من الكشف')}
       </div>`)}
 
-    ${card(`قواعد التصنيف (${num(rules.length)})`, rules.length ? `<table class="table compact">
+    ${foldable(`قواعد التصنيف (${num(rules.length)})`, rules.length ? `<table class="table compact">
       <thead><tr><th>الشرط</th><th>المجال</th><th></th></tr></thead>
       <tbody>${rules.map((r) => `<tr>
         <td>${escapeHTML(ruleAr(r))}</td>
@@ -545,13 +580,13 @@ export function viewSettings(state, a) {
         <td><button class="btn tiny danger" data-action="del-rule" data-id="${r.id}">حذف</button></td>
       </tr>`).join('')}</tbody></table>` : empty('لا قواعد بعد — وسم أي عملية من صفحة العمليات يُنشئ قاعدة تلقائيًا.'))}
 
-    ${card('ربط رسائل البنك بالجوال', inboxBody(state), { cls: state.inbox?.boxId ? 'own' : '' })}
+    ${foldable('ربط رسائل البنك بالجوال', inboxBody(state), { hint: state.inbox?.boxId ? 'مربوط' : 'غير مربوط' })}
 
-    ${card('التنبيهات', notifyBody(state), { cls: state.notify?.enabled ? 'own' : '' })}
+    ${foldable('التنبيهات', notifyBody(state), { hint: state.notify?.enabled ? 'مفعّلة' : 'متوقفة' })}
 
-    ${card('رمز الدخول والمزامنة', syncBody(state), { cls: state.sync?.secret ? 'own' : '' })}
+    ${foldable('رمز الدخول والمزامنة', syncBody(state), { open: true, hint: state.sync?.secret ? 'مفعّلة' : 'متوقفة' })}
 
-    ${card('البيانات وأين تُحفظ', `
+    ${foldable('البيانات وأين تُحفظ', `
       <p class="lead">بياناتك محفوظة <strong>داخل هذا المتصفح على هذا الجهاز</strong> فقط — لا خادم ولا حساب ولا مزامنة.
         فلا تظهر على جهاز آخر، ولا تنتقل بين نطاقين مختلفين.</p>
       ${state.storage ? `<p class="hint">حالة التخزين:
@@ -667,6 +702,12 @@ function notifyBody(state) {
     <p class="hint">حدٌّ تقني يلزم أن تعرفه: المتصفح لا يوقظ التطبيق وهو مغلق ما لم يوجد خادم دفع،
       فالتنبيهات تظهر حين تفتحه أو يكون عاملًا في الخلفية. وعلى الآيفون لا تعمل إلا بعد
       <strong>«إضافة إلى الشاشة الرئيسية»</strong>.</p>`;
+}
+
+/** مبدّل أقسامٍ داخل الشاشة — أرخص من وجهةٍ مستقلّة لكل قسم. */
+export function segmented(tabs, active) {
+  return `<nav class="segmented">${tabs.map((t) => `
+    <a href="#${t.id}" class="${t.id === active ? 'on' : ''}" ${t.id === active ? 'aria-current="page"' : ''}>${escapeHTML(t.ar)}</a>`).join('')}</nav>`;
 }
 
 function syncBody(state) {

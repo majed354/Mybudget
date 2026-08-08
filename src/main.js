@@ -25,6 +25,7 @@ const state = {
   importAccount: '',
   openCategory: null,
   filter: { q: '', cat: '', account: '', onlyUncat: false, onlyExcluded: false },
+  txLimit: 40,                // سقف القائمة المعروضة، يزيد بالطلب
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
   storage: null,
@@ -37,15 +38,28 @@ const state = {
 };
 
 const ROUTES = {
-  dashboard: { ar: 'لوحة القيادة', icon: '📊' },
+  dashboard: { ar: 'لوحة القيادة', short: 'الرئيسية', icon: '📊', primary: true },
+  analysis: { ar: 'التحليل', short: 'التحليل', icon: '🧭', primary: true },
+  financing: { ar: 'الملاءة والتمويل', short: 'الملاءة', icon: '🏦', primary: true },
+  transactions: { ar: 'العمليات', short: 'العمليات', icon: '📜', primary: true },
   categories: { ar: 'المجالات', icon: '🧭' },
   commitments: { ar: 'الالتزامات', icon: '🔁' },
   beneficiaries: { ar: 'المستفيدون', icon: '👥' },
-  financing: { ar: 'الملاءة والتمويل', icon: '🏦' },
-  transactions: { ar: 'العمليات', icon: '📜' },
   import: { ar: 'الاستيراد', icon: '📥' },
   settings: { ar: 'الإعدادات', icon: '⚙️' },
 };
+
+/**
+ * ثلاث شاشاتٍ تحليلية على بياناتٍ واحدة كانت ثلاث وجهاتٍ مستقلّة، وذلك
+ * تقسيمُ مبرمجٍ لا تقسيمُ مستخدم. جُمعت تحت «التحليل» بمبدّلٍ داخلي، فنزلت
+ * الوجهات من ثمانٍ إلى أربع — وهو الحدّ الذي يسع شريطًا سفليًّا ثابتًا بلا
+ * تمريرٍ أفقي، وعليه استقرّت تطبيقات المصارف.
+ */
+const ANALYSIS_TABS = [
+  { id: 'categories', ar: 'المجالات' },
+  { id: 'commitments', ar: 'الالتزامات' },
+  { id: 'beneficiaries', ar: 'المستفيدون' },
+];
 
 // ── الإقلاع ───────────────────────────────────────────────────────────────
 async function boot() {
@@ -66,8 +80,12 @@ async function boot() {
   await reload();
   window.addEventListener('hashchange', () => { state.route = routeFromHash(); render(); });
   state.route = routeFromHash();
+  // شريطان من قائمةٍ واحدة: الجانبيّ على الشاشات الواسعة يعرض الوجهات كلها،
+  // والسفليّ على الجوال يقتصر على الأربع الأساسية فيثبت بلا تمريرٍ أفقي.
+  // والاسم القصير للسفليّ: «الملاءة» تسع الخانة، و«الملاءة والتمويل» لا تسعها.
   document.getElementById('nav').innerHTML = Object.entries(ROUTES)
-    .map(([k, v]) => `<a href="#${k}" data-route="${k}"><span>${v.icon}</span>${v.ar}</a>`).join('');
+    .map(([k, v]) => `<a href="#${k}" data-route="${k}" ${v.primary ? 'data-primary="1"' : ''}>
+      <span>${v.icon}</span><em class="nav-full">${v.ar}</em><em class="nav-short">${v.short || v.ar}</em></a>`).join('');
   bindEvents();
   render();
   if (state.sync.secret) {
@@ -361,10 +379,15 @@ function recompute() {
  * اتّساع الشريط بالخطوط والأيقونات، فلا يجد ما يُمرّره.
  */
 function markActiveNav() {
+  document.querySelectorAll('.head-actions a').forEach((a) => {
+    a.classList.toggle('active', a.dataset.route === state.route);
+  });
   const links = document.querySelectorAll('#nav a');
   let current = null;
   links.forEach((a) => {
-    const on = a.dataset.route === state.route;
+    // الشاشات التحليلية الثلاث تُضيء «التحليل» لأنها صارت أقسامًا فيه
+    const on = a.dataset.route === state.route
+      || (a.dataset.route === 'analysis' && ANALYSIS_TABS.some((t) => t.id === state.route));
     a.classList.toggle('active', on);
     a.setAttribute('aria-current', on ? 'page' : 'false');
     if (on) current = a;
@@ -405,8 +428,13 @@ function render() {
     document.getElementById('gate-code')?.focus();
     return;
   }
+  // «التحليل» ليس شاشةً بذاته بل غلافٌ لأقسامه الثلاثة، وقسمُه المفتوح هو
+  // المسار نفسه — فتبقى الروابط القديمة (#categories…) عاملةً كما كانت.
+  const inAnalysis = state.route === 'analysis' || ANALYSIS_TABS.some((t) => t.id === state.route);
+  const section = state.route === 'analysis' ? ANALYSIS_TABS[0].id : state.route;
+
   let html = '';
-  switch (state.route) {
+  switch (section) {
     case 'import': html = V.viewImport(state); break;
     case 'categories': html = V.viewCategories(a, state); break;
     case 'commitments': html = V.viewCommitments(a); break;
@@ -416,7 +444,9 @@ function render() {
     case 'settings': html = V.viewSettings(state, a); break;
     default: html = V.viewDashboard(a, state);
   }
-  app.innerHTML = `<h1 class="page-title">${ROUTES[state.route].icon} ${ROUTES[state.route].ar}</h1>${html}`;
+  const head = inAnalysis ? ROUTES.analysis : ROUTES[state.route];
+  const tabs = inAnalysis ? V.segmented(ANALYSIS_TABS, section) : '';
+  app.innerHTML = `<h1 class="page-title">${head.icon} ${head.ar}</h1>${tabs}${html}`;
   app.scrollTop = 0;
   updateBanner();
 }
@@ -529,6 +559,13 @@ function bindEvents() {
       await setSyncSecret(null);
       toast('أُوقفت المزامنة', 'warn');
       render();
+      return;
+    }
+    if (action === 'tx-more') {
+      state.txLimit = (state.txLimit || V.TX_PAGE) + V.TX_PAGE;
+      render();
+      // الإبقاء على موضع القراءة: الدفعة الجديدة تُضاف أسفل ما كان يقرؤه
+      el.scrollIntoView?.({ block: 'center' });
       return;
     }
     if (action === 'sync-rotate') { await rotateSecret(); return; }
@@ -757,6 +794,8 @@ function updateFilter() {
     onlyUncat: !!g('f-uncat')?.checked,
     onlyExcluded: !!g('f-exc')?.checked,
   };
+  // كل تغيير مرشِّح يبدأ قائمةً جديدة، فلا يُورَّث سقفُ القائمة السابقة
+  state.txLimit = V.TX_PAGE;
   render();
 }
 
