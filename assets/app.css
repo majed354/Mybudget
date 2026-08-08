@@ -105,7 +105,31 @@ a { color: inherit; text-decoration: none; }
 }
 .segmented a.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
 .side-foot { margin-top: auto; }
-.head-actions { display: none; }   /* الشاشات الواسعة تعرضهما ضمن #nav */
+/* الوجهتان النادرتان تظهران في #nav على الشاشات الواسعة، أما سحب الرسائل
+   فليس وجهةً فيبقى ظاهرًا في كل حجم — وهو أكثر الأفعال تكرارًا في اليوم */
+.head-actions { display: flex; gap: 4px; margin-top: 4px; }
+.head-actions a { display: none; }
+.head-actions a, .head-actions button {
+  place-items: center; width: 34px; height: 34px; font: inherit;
+  border: 1px solid var(--line); border-radius: 10px; font-size: 1.05rem;
+  background: var(--surface-2); color: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.head-actions button { display: grid; }
+.head-actions a:hover, .head-actions button:hover { border-color: var(--accent); }
+.head-actions button.busy { opacity: .5; pointer-events: none; }
+.head-actions button[hidden] { display: none; }
+/* علامة الانتظار: عددٌ صغير على الزاوية، لا تظهر إلا حين ينتظر شيء */
+.head-actions button.has-badge { position: relative; }
+.head-actions button.has-badge::after {
+  content: attr(data-badge);
+  position: absolute; inset-block-start: -5px; inset-inline-end: -5px;
+  min-width: 17px; height: 17px; padding: 0 3px;
+  display: grid; place-items: center;
+  background: var(--danger); color: #fff;
+  font-size: .6rem; font-weight: 700; line-height: 1; border-radius: 99px;
+  border: 2px solid var(--surface);
+}
 
 /* رقم النسخة: ظاهرٌ دائمًا، هادئٌ حتى يُقصد */
 .ver-chip {
@@ -446,12 +470,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .nav-full { display: none; }
   .nav-short { display: inline; }
   /* وجهتان نادرتان (الاستيراد والإعدادات) في ترويسةٍ رفيعة لا في الشريط */
-  .head-actions { display: flex; gap: 4px; margin-inline-start: auto; }
-  .head-actions a {
-    display: grid; place-items: center; width: 34px; height: 34px;
-    border-radius: 10px; font-size: 1.05rem; background: var(--surface-2);
-  }
-  .head-actions a.active { background: var(--accent-soft); }
+  .head-actions { margin-inline-start: auto; margin-top: 0; }
+  .head-actions a { display: grid; }
+  .head-actions a.active { background: var(--accent-soft); border-color: var(--accent); }
 
   .two-col { grid-template-columns: 1fr; }
   /* حشوةٌ سفلية بقدر الشريط، وإلّا اختبأ آخر سطرٍ تحته فتعذّر بلوغه */
@@ -488,6 +509,17 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   background: var(--surface-2); border: 1px dashed var(--accent); border-radius: 10px;
   padding: 10px; word-break: break-all; user-select: all;
 }
+/* الرسالة التي لم تُفهم تُعرض بنصّها كاملًا محفوظَ الأسطر: الاقتطاع يُخفي
+   موضع العطب، والأسطر نفسها جزءٌ من شكل الرسالة */
+.failed-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.failed-list li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.fl-head { display: flex; gap: 8px; align-items: center; font-size: .74rem; margin-bottom: 6px; }
+.fl-text {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .74rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  max-height: 11rem; overflow: auto; user-select: all;
+}
+
 .reminders { margin: 6px 0; padding-inline-start: 18px; font-size: .88rem; }
 .reminders li { margin: 4px 0; }
 

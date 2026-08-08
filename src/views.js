@@ -737,9 +737,17 @@ function inboxBody(state) {
       ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
     ${inboxHarvest(i)}
     ${i.failed?.length ? `<h3>رسائل لم تُفهم (${num(i.failed.length)})</h3>
-      <ul class="reminders">${i.failed.slice(0, 5).map((m) => `<li><span class="muted">${escapeHTML(m.reason)}:</span> ${escapeHTML(String(m.text).slice(0, 90))}</li>`).join('')}</ul>
+      <p class="hint">النصّ كاملًا لا مقتطعًا: بلا رؤيته لا يُعرف أهو شكلٌ جديد أم محرفٌ خفيّ أفسد القراءة.</p>
+      <ul class="failed-list">${i.failed.slice(0, 8).map((m) => `<li>
+        <div class="fl-head"><span class="tag amb">${escapeHTML(m.reason || '')}</span>
+          <span class="muted">${escapeHTML(m.sender || 'بلا مرسِل')}</span></div>
+        <pre class="fl-text">${escapeHTML(String(m.text || ''))}</pre>
+      </li>`).join('')}</ul>
+      <div class="row gap wrap">
+        <button class="btn" data-action="copy-failed">انسخ نصوصها كاملة</button>
+      </div>
       <p class="hint">تبقى في الصندوق و<strong>تُعاد محاولة تحليلها في كل سحب</strong> — فإن كان شكلها قد أُضيف
-        في نسخةٍ أحدث، حدّث الصفحة ثم اسحب فتُفهم. وإن بقيت، أرسل نموذجًا منها لأضيف شكلها.
+        في نسخةٍ أحدث، حدّث الصفحة ثم اسحب فتُفهم. وإن بقيت، انسخها وأرسلها لأضيف شكلها.
         <br>النسخة العاملة الآن على هذا الجهاز: <code>${escapeHTML(APP_VERSION)}</code>.</p>` : ''}
     <p class="hint">🔒 نصّ الرسالة يمكث في الصندوق حتى يسحبه التطبيق فيُمسح فورًا، وما لم يُسحب يُمسح تلقائيًا بعد ٧٢ ساعة.
       ولا يُمسّ شيء من رسائلك في جوالك.</p>`;

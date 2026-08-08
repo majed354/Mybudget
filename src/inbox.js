@@ -224,6 +224,23 @@ export async function drain(secret, { accountLabel } = {}) {
   return { added, failed };
 }
 
+/**
+ * نظرةٌ في الصندوق بلا أخذ: كم فيه ممّا يصير عمليةً.
+ * تُستعمل حين يتعذّر السحب، ليُعرف أثمّة شيءٌ ينتظر فيُعلَّم عليه — ولا
+ * تُحتسب فيها رموزُ التحقّق ولا ما لم يُفهم، فتلك ليست عملياتٍ تنتظر.
+ */
+export async function peek(secret) {
+  const box = await boxIdFor(secret);
+  const { messages = [] } = await call('GET', box);
+  let understood = 0, unknown = 0;
+  for (const m of messages) {
+    const p = parseBankSMS(m.text, { today: (m.receivedAt || '').slice(0, 10) || undefined, sender: m.sender });
+    if (p.ok) understood++;
+    else if (!p.sensitive) unknown++;
+  }
+  return { total: messages.length, understood, unknown };
+}
+
 export async function clearInbox(secret) {
   return call('DELETE', await boxIdFor(secret));
 }

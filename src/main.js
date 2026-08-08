@@ -33,7 +33,7 @@ const state = {
   sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
-  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {} },
+  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
   busy: false,
 };
@@ -91,6 +91,7 @@ async function boot() {
       <span>${v.icon}</span><em class="nav-full">${v.ar}</em><em class="nav-short">${v.short || v.ar}</em></a>`).join('');
   bindEvents();
   bindVersionChip();
+  bindDrainButton();
   render();
   if (state.sync.secret) {
     state.inbox.boxId = await Inbox.boxIdFor(state.sync.secret);
@@ -148,11 +149,15 @@ async function drainInbox({ silent = false } = {}) {
       toast(failed.length ? `${failed.length} رسالة لم تُفهم` : 'لا رسائل جديدة', failed.length ? 'warn' : '');
     }
     state.inbox.lastAt = new Date().toISOString();
+    state.inbox.waiting = 0;   // ما فُهم أُخذ، فلا شيء ينتظر
   } catch (err) {
     state.inbox.status = err.message;
+    // تعذّر السحب: نسأل الصندوق كم فيه ممّا يصير عمليةً، ليُعلَّم على الزرّ
+    try { state.inbox.waiting = (await Inbox.peek(state.sync.secret)).understood; } catch { /* الشبكة نفسها منقطعة */ }
     if (!silent) toast(err.message, 'danger');
   } finally {
     state.inbox.busy = false;
+    bindDrainButton.sync?.();
     render();
   }
 }
@@ -403,6 +408,34 @@ function recompute() {
 }
 
 /**
+ * سحب الرسائل في الترويسة: فعلٌ يُكرَّر في اليوم مرات، فمكانه مع أقرب
+ * الأزرار لا في قاع الإعدادات خلف بطاقةٍ مطويّة.
+ *
+ * وعليه علامةٌ حين ينتظر في الصندوق ما يصير عمليةً — ولا تُحتسب فيها رموزُ
+ * التحقّق ولا ما لم يُفهم: تلك ليست عملياتٍ تنتظر، وعلامةٌ لا تزول بالضغط
+ * أسوأ من لا علامة. والسحب تلقائيّ أصلًا، فلا تظهر إلا حين يتعذّر.
+ */
+function bindDrainButton() {
+  const el = document.getElementById('drain');
+  if (!el) return;
+  const sync = () => {
+    el.hidden = !state.sync.secret;             // بلا رمزٍ لا صندوق
+    const n = state.inbox.waiting || 0;
+    el.classList.toggle('has-badge', n > 0);
+    el.dataset.badge = n > 9 ? '٩+' : String(n);
+  };
+  bindDrainButton.sync = sync;
+  sync();
+  el.addEventListener('click', async () => {
+    if (el.classList.contains('busy')) return;
+    el.classList.add('busy');
+    await drainInbox({ silent: false });
+    el.classList.remove('busy');
+    sync();
+  });
+}
+
+/**
  * رقم النسخة زرُّ تحديث.
  * أكثرُ ما أربك استعمال هذا التطبيق شيفرةٌ قديمة على الجهاز: يُصلَح العطب
  * وتبقى الصفحة على وحدات الأمس، فيُرى العطب مُصلَحًا وهو ظاهر. فالرقم
@@ -559,6 +592,15 @@ function bindEvents() {
     if (action === 'widget-copy-script') {
       await navigator.clipboard.writeText(V.scriptableSource(Sync.widgetUrl(state.settings?.widget?.token || '')));
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
+      return;
+    }
+    if (action === 'copy-failed') {
+      // بنصّها كاملًا وبمرسِلها: هذان ما يلزمان لإضافة شكلٍ إلى المحلّل
+      const txt = (state.inbox.failed || [])
+        .map((m, n) => `── ${n + 1} ── [${m.sender || 'بلا مرسِل'}] ${m.reason || ''}\n${m.text || ''}`)
+        .join('\n\n');
+      await navigator.clipboard.writeText(txt);
+      toast(`نُسخت ${state.inbox.failed.length} رسالة`, 'ok');
       return;
     }
     if (action === 'go-tx') { location.hash = 'transactions'; return; }
