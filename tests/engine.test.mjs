@@ -528,3 +528,32 @@ test('تاريخ اليوم بتوقيت المستخدم لا بتوقيت غر
   const noon = new Date('2026-08-09T12:00:00+03:00');
   assert.equal(todayISO(noon), noon.toISOString().slice(0, 10));
 });
+
+// ── التصنيف الدقيق: مجالٌ وصنفٌ فرعي يرثهما كل شراءٍ من المحلّ ────────────
+
+test('الصنف الفرعي يتبع القاعدة فيرثه كل شراءٍ من المحلّ نفسه', async () => {
+  const { suggestRule, applyClassification } = await import('../src/classify.js');
+  const mk = (id, desc) => ({ id, desc, amount: -20, date: '2026-08-0' + id, account: 'x', bankType: 'مدين' });
+  const rows = [mk(1, 'شراء نقاط بيع SALEH ABD'), mk(2, 'شراء نقاط بيع SALEH ABD'), mk(3, 'شراء نقاط بيع OTHER')];
+  applyClassification(rows);
+
+  // يُوسم واحدٌ منها، فتُشتقّ منه قاعدةٌ بالمجال والصنف
+  const rule = { id: 'r1', priority: 10, ...suggestRule(rows[0], 'dining', 'عصائر') };
+  assert.equal(rule.subcategory, 'عصائر');
+
+  applyClassification(rows, [rule]);
+  assert.equal(rows[0].subcategory, 'عصائر');
+  assert.equal(rows[1].subcategory, 'عصائر', 'ويرثه شراءٌ آخر من المحلّ نفسه');
+  assert.equal(rows[1].category, 'dining');
+  assert.notEqual(rows[2].subcategory, 'عصائر', 'ولا يتعدّى إلى محلٍّ غيره');
+});
+
+test('الأصناف المقترحة: المجهَّز ثم ما أضافه المستخدم بلا تكرار', async () => {
+  const { subcategoriesFor } = await import('../src/classify.js');
+  const seeded = subcategoriesFor('dining');
+  assert.ok(seeded.includes('عصائر'));
+  const withMine = subcategoriesFor('dining', { dining: ['عصير طازج بالحيّ', 'عصائر'] });
+  assert.ok(withMine.includes('عصير طازج بالحيّ'));
+  assert.equal(withMine.filter((s) => s === 'عصائر').length, 1, 'لا يتكرر ما كان مجهَّزًا');
+  assert.deepEqual(subcategoriesFor('لا-وجود-له'), [], 'مجالٌ بلا أصناف لا يكسر شيئًا');
+});

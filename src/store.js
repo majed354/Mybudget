@@ -120,6 +120,8 @@ export const DEFAULT_SETTINGS = {
   budget: { monthlyLimit: '' },
   // أداة الشاشة: رمزٌ عشوائي مستقلّ عن مفتاح المزامنة، فإبطاله لا يمسّها
   widget: { token: '', enabled: false },
+  // أصنافٌ فرعية أضافها المستخدم فوق المجهّزة، لتُقترح في المرات التالية
+  subcategories: {},
   ui: { theme: 'auto' },
 };
 

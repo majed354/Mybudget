@@ -2,7 +2,7 @@
 
 import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION, todayISO } from './util.js';
 import { donut, hbars, monthlyChart, stackedBar, gauge, sparkline } from './charts.js';
-import { CATEGORIES, CATEGORY_MAP, TYPES } from './classify.js';
+import { CATEGORIES, CATEGORY_MAP, TYPES, subcategoriesFor } from './classify.js';
 import { VERDICT, VERDICT_AR, installmentOf, effectiveAPR } from './affordability.js';
 import { lastDays } from './inbox.js';
 
@@ -250,7 +250,7 @@ export function viewDashboard(a, state) {
   <div class="grid">
     ${monthCard(state.month)}
 
-    ${latest.length ? card('آخر خمس عمليات', txTable(latest), {
+    ${latest.length ? card('آخر خمس عمليات', txTable(latest, { state }), {
       actions: '<button class="btn tiny" data-action="go-tx">كل العمليات</button>',
     }) : ''}
 
@@ -567,7 +567,7 @@ export function viewTransactions(a, state) {
         <label class="chk"><input type="checkbox" id="f-uncat" ${state.filter.onlyUncat ? 'checked' : ''}> غير المصنّف فقط</label>
         <label class="chk"><input type="checkbox" id="f-exc" ${state.filter.onlyExcluded ? 'checked' : ''}> المستبعد فقط</label>
       </div>
-      ${txTable(shown, { editable: true })}
+      ${txTable(shown, { editable: true, state })}
       <p class="hint">وسمُك لعملية يُنشئ قاعدة تُطبَّق على كل عمليات التاجر نفسه — فتصنيف مئة عملية يستغرق دقائق.</p>
       ${total > shown.length ? `<div class="row gap center mt">
         <button class="btn" data-action="tx-more">اعرض ${num(Math.min(TX_PAGE, total - shown.length))} عملية أخرى</button>
@@ -587,7 +587,7 @@ export const TX_PAGE = 40;
  * في الأعلى لأنهما المقروءان، وما دونهما بيانٌ مساعد. ويصير سطرًا واحدًا
  * على الشاشات الواسعة، فلا حاجة إلى بنيتين ولا إلى تكرار في DOM.
  */
-function txTable(rows, { editable = false } = {}) {
+function txTable(rows, { editable = false, state = {} } = {}) {
   if (!rows.length) return empty('لا توجد عمليات مطابقة.');
   return `<ul class="tx-list">${rows.map((t) => `
     <li class="tx-row ${t.excluded ? 'excluded' : ''}">
@@ -607,10 +607,46 @@ function txTable(rows, { editable = false } = {}) {
         ${editable ? `<select class="cat-select" data-action="set-cat" data-id="${t.id}" aria-label="مجال العملية">
             ${CATEGORIES.map((c) => `<option value="${c.id}" ${(t.category || 'other') === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}
           </select>` : `<span class="tag">${escapeHTML(CATEGORY_MAP[t.category]?.ar || '—')}</span>`}
+        ${t.subcategory ? `<span class="tag sub">${escapeHTML(t.subcategory)}</span>` : ''}
         ${t.categorySource === 'user' ? '<span class="dot user" title="وسم يدوي"></span>' : t.categorySource === 'rule' ? '<span class="dot rule" title="بقاعدة"></span>' : ''}
+        <button class="btn tiny" data-action="tag-open" data-id="${t.id}" title="صنّف المحل بدقّة">🏷️</button>
         ${editable ? `<button class="btn tiny" data-action="toggle-exclude" data-id="${t.id}" title="استبعاد/إرجاع">${t.excluded ? '↩' : '⊘'}</button>` : ''}
       </div>
+      ${state.tagging === t.id ? tagEditor(t, state) : ''}
     </li>`).join('')}</ul>`;
+}
+
+/**
+ * محرّر تصنيف المحل: مجالٌ وصنفٌ فرعي، وما يُختار يصير قاعدةً تلتقط كل
+ * شراءٍ من المحلّ نفسه بعدها. فالوسم مرةً واحدة لا في كل عملية.
+ *
+ * والصنف الفرعي قائمةٌ مقترحة يُكتب فيها: `datalist` يعرض الجاهز ولا يمنع
+ * الجديد — فلا يُحبس المستخدم في قائمةٍ نقصت، ولا يُترك بلا اقتراح فيكتب
+ * الاسم الواحد بوجوه.
+ */
+function tagEditor(t, state) {
+  const cat = t.category || 'other';
+  const subs = subcategoriesFor(cat, state.settings?.subcategories || {});
+  const merchant = t.merchant || t.merchantHint || '';
+  return `<div class="tag-editor">
+    <p class="hint">${merchant ? `سيُطبَّق على كل عمليات <strong>${escapeHTML(merchant)}</strong> — الماضية والقادمة.`
+      : 'لا اسم تاجرٍ في هذه العملية، فستُطبَّق على أشباهها بالمبلغ أو النوع.'}</p>
+    <div class="row wrap gap">
+      <label class="field"><span>المجال</span>
+        <select id="tag-cat" data-id="${t.id}">
+          ${CATEGORIES.map((c) => `<option value="${c.id}" ${cat === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field"><span>الصنف الفرعي (اختر أو اكتب جديدًا)</span>
+        <input id="tag-sub" list="tag-sub-list" value="${escapeHTML(t.subcategory || '')}" placeholder="مثال: عصائر">
+        <datalist id="tag-sub-list">${subs.map((s) => `<option value="${escapeHTML(s)}"></option>`).join('')}</datalist>
+      </label>
+    </div>
+    <div class="row gap end mt">
+      <button class="btn" data-action="tag-cancel">إلغاء</button>
+      <button class="btn primary" data-action="tag-save" data-id="${t.id}">احفظ وطبّقه على المحل</button>
+    </div>
+  </div>`;
 }
 
 function excuseAr(r) {

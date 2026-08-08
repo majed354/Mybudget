@@ -206,6 +206,44 @@ export const CATEGORIES = [
   { id: 'other',     ar: 'غير مصنّف',             group: 'غامض',     color: '#9ca3af' },
 ];
 
+/**
+ * أصنافٌ فرعية جاهزة تحت كل مجال.
+ *
+ * المجال يجيب «أين يذهب مالي؟» والصنف الفرعي يجيب «في أيّ شيءٍ منه؟» —
+ * ومن عرف أن مطاعمه ألفٌ لا يملك قرارًا، ومن عرف أن ثمانمئةً منها توصيلٌ
+ * يملك واحدًا. وهذه بذورٌ لا حصر: ما نقص يُضيفه المستخدم فيبقى معه.
+ */
+export const SUBCATEGORIES = {
+  dining: ['عصائر', 'قهوة ومقاهٍ', 'مطاعم بحرية', 'مشاوي ومندي', 'برجر ووجبات سريعة', 'مخابز وحلويات', 'توصيل طلبات', 'إفطار وفطائر'],
+  groceries: ['سوبرماركت', 'بقالة الحيّ', 'خضار وفواكه', 'لحوم ودواجن', 'مكسرات وتمور', 'ألبان', 'مياه وغاز'],
+  transport: ['وقود', 'صيانة وقطع غيار', 'غسيل سيارات', 'تطبيقات نقل', 'مواقف ومخالفات', 'إطارات'],
+  health: ['صيدليات', 'عيادات', 'مختبرات وأشعة', 'أسنان', 'نظارات وبصريات', 'مستلزمات طبية'],
+  shopping: ['ملابس وأحذية', 'عطور ومستحضرات', 'إلكترونيات', 'أثاث ومفروشات', 'هدايا', 'حلاقة وعناية', 'متاجر إلكترونية'],
+  subs: ['ذكاء اصطناعي', 'خدمات سحابية', 'بثّ ومشاهدة', 'موسيقى', 'ألعاب', 'تخزين سحابي', 'برامج وأدوات'],
+  utilities: ['كهرباء', 'مياه', 'غاز', 'نفايات وخدمات بلدية'],
+  telecom: ['باقة جوال', 'إنترنت منزلي', 'شحن رصيد'],
+  education: ['رسوم دراسية', 'دورات ومنصّات', 'كتب ومراجع', 'حضانة وروضة'],
+  housing: ['إيجار', 'صيانة منزل', 'أثاث ثابت', 'رسوم اتحاد ملّاك'],
+  sports: ['اشتراك نادٍ', 'ملاعب', 'مستلزمات رياضية'],
+  travel: ['طيران', 'فنادق', 'تأشيرات', 'إيجار سيارات', 'شحن محافظ سفر'],
+  charity: ['زكاة', 'صدقة', 'أضاحي وكفارات', 'كفالة أيتام'],
+  support: ['إعالة والدين', 'مصروف أبناء', 'مساعدة أقارب'],
+  fees: ['رسوم حكومية', 'رسوم بنكية', 'مخالفات', 'تجديد وثائق'],
+  insurance: ['تأمين مركبة', 'تأمين صحي', 'تأمين منزل'],
+  debt: ['قسط تمويل', 'سداد بطاقة', 'تمويل عقاري'],
+  services: ['مغاسل', 'تنظيف منزلي', 'صيانة أجهزة', 'سباكة وكهرباء'],
+  tech: ['أجهزة', 'ملحقات', 'صيانة أجهزة'],
+  gifts: ['مناسبات', 'ورود', 'هدايا أطفال'],
+  invest: ['أسهم', 'صناديق', 'ادخار', 'ذهب'],
+};
+
+/** ما جُهّز وما أضافه المستخدم، بلا تكرار. */
+export function subcategoriesFor(categoryId, userAdded = {}) {
+  const seeded = SUBCATEGORIES[categoryId] || [];
+  const mine = userAdded[categoryId] || [];
+  return [...new Set([...seeded, ...mine])];
+}
+
 export const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
 export const GROUP_OF = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.group]));
 export const ESSENTIAL_GROUPS = new Set(['ملتزم', 'شبه ثابت']);
@@ -350,7 +388,16 @@ export function applyClassification(transactions, rules = [], own = {}) {
     if (t.selfTransfer) t.type = 'internal';
     if (t.categorySource === 'user') continue;
     const rule = sorted.find((r) => ruleMatches(r, t));
-    if (rule) { t.category = rule.category; t.categorySource = 'rule'; t.ruleId = rule.id; continue; }
+    if (rule) {
+      t.category = rule.category;
+      // الصنف الفرعي يتبع القاعدة كما يتبعها المجال: من وسم «عصائر» مرةً
+      // لا يعيدها في كل شراءٍ من المحلّ نفسه
+      t.subcategory = rule.subcategory || '';
+      t.categorySource = 'rule';
+      t.ruleId = rule.id;
+      continue;
+    }
+    t.subcategory = '';
     const guess = guessCategoryFromMerchant(t.merchant);
     if (guess) { t.category = guess; t.categorySource = 'merchant'; t.ruleId = null; continue; }
     const byPurpose = PURPOSE_CATEGORY[t.purpose];
@@ -367,10 +414,11 @@ export function applyClassification(transactions, rules = [], own = {}) {
 const FIXED_AMOUNT_TYPES = new Set(['standing_order', 'loan', 'bill', 'fee']);
 
 /** قاعدة مقترحة من وسمٍ يدوي، لتعميمه على أشباه العملية لا على ما يخالفها. */
-export function suggestRule(t, category) {
-  if (t.merchantKey) return { field: 'merchant', op: 'key', value: t.merchantKey, category, label: t.merchant };
-  const amountRule = { field: 'amount', op: 'equals', value: Math.abs(t.amount), category, label: `مبلغ ${Math.abs(t.amount)}` };
+export function suggestRule(t, category, subcategory = '') {
+  const sub = subcategory || undefined;
+  if (t.merchantKey) return { field: 'merchant', op: 'key', value: t.merchantKey, category, subcategory: sub, label: t.merchant };
+  const amountRule = { field: 'amount', op: 'equals', value: Math.abs(t.amount), category, subcategory: sub, label: `مبلغ ${Math.abs(t.amount)}` };
   if (FIXED_AMOUNT_TYPES.has(t.type)) return amountRule;
-  if (t.type && t.type !== 'pos') return { field: 'type', op: 'equals', value: t.type, category, label: TYPES[t.type]?.ar };
+  if (t.type && t.type !== 'pos') return { field: 'type', op: 'equals', value: t.type, category, subcategory: sub, label: TYPES[t.type]?.ar };
   return amountRule;
 }

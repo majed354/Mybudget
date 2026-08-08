@@ -2,7 +2,7 @@
 
 import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence, rememberDeleted, forgetDeleted } from './store.js';
 import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from './import.js';
-import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
+import { applyClassification, suggestRule, CATEGORY_MAP, subcategoriesFor } from './classify.js';
 import { analyze, monthSnapshot } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
 import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO } from './util.js';
@@ -36,6 +36,7 @@ const state = {
   inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
   paste: null,                // لصق الرسائل الفائتة: النصّ ونتيجة تحليله
+  tagging: null,              // معرّف العملية التي يُحرَّر تصنيفها
   busy: false,
 };
 
@@ -626,6 +627,9 @@ function bindEvents() {
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
       return;
     }
+    if (action === 'tag-open') { state.tagging = el.dataset.id; render(); return; }
+    if (action === 'tag-cancel') { state.tagging = null; render(); return; }
+    if (action === 'tag-save') { await saveTag(el.dataset.id); return; }
     if (action === 'paste-open') { state.paste = state.paste || { text: '', result: null }; render(); return; }
     if (action === 'paste-clear') { state.paste = { text: '', result: null }; render(); return; }
     if (action === 'paste-parse') {
@@ -894,6 +898,49 @@ async function dropAccount(account) {
 }
 
 // ── التصنيف والاستبعاد ────────────────────────────────────────────────────
+/**
+ * يحفظ تصنيف المحل: مجالًا وصنفًا فرعيًّا، ويُنشئ به قاعدةً تلتقط كل شراءٍ
+ * من المحلّ نفسه — الماضي والقادم. فالوسم مرةً واحدة لا في كل عملية.
+ *
+ * والصنف الفرعي الجديد يُحفظ في الإعدادات ليُقترح في المرات التالية، فلا
+ * يُكتب الاسم الواحد بوجوهٍ شتّى («عصائر» و«عصير» و«محل عصير») فتتفرّق
+ * أرقامُ بابٍ واحد.
+ */
+async function saveTag(id) {
+  const t = state.transactions.find((x) => x.id === id);
+  if (!t) return;
+  const category = document.getElementById('tag-cat')?.value || t.category || 'other';
+  const subcategory = (document.getElementById('tag-sub')?.value || '').trim().slice(0, 40);
+
+  if (subcategory) {
+    const known = subcategoriesFor(category, state.settings?.subcategories || {});
+    if (!known.includes(subcategory)) {
+      const map = { ...(state.settings.subcategories || {}) };
+      map[category] = [...(map[category] || []), subcategory];
+      state.settings = await saveSettings({ subcategories: map });
+    }
+  }
+
+  t.category = category;
+  t.subcategory = subcategory;
+  t.categorySource = 'user';
+  await db.put(stripRuntime(t));
+
+  // القاعدة تحمل الاثنين، فيرثهما كل شراءٍ من المحلّ نفسه
+  const s = suggestRule(t, category, subcategory);
+  const at = state.rules.findIndex((r) => r.field === s.field && String(r.value) === String(s.value));
+  if (at >= 0) state.rules[at] = { ...state.rules[at], ...s };
+  else state.rules.push({ id: uid(), priority: 10, ...s });
+  await saveRules(state.rules);
+
+  state.tagging = null;
+  await reload();
+  const affected = state.transactions.filter((x) => x.ruleId === (state.rules[at >= 0 ? at : state.rules.length - 1]?.id)).length;
+  toast(`${CATEGORY_MAP[category]?.ar}${subcategory ? ` · ${subcategory}` : ''}${affected > 1 ? ` — طُبّق على ${affected} عملية` : ''}`, 'ok');
+  schedulePush();
+  render();
+}
+
 async function setCategory(id, category) {
   const t = state.transactions.find((x) => x.id === id);
   if (!t) return;

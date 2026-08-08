@@ -550,3 +550,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
 .btn.ghost:hover { color: var(--fg); }
 .warn-text { color: var(--warn); }
+
+/* ── محرّر تصنيف المحل ─────────────────────────────────────── */
+.tag-editor {
+  flex: 1 1 100%; margin-top: 8px; padding: 10px 12px;
+  background: var(--surface-2); border: 1px solid var(--accent); border-radius: 11px;
+}
+.tag-editor .field { min-width: 140px; }
+.tag .sub, .tag.sub { background: var(--accent-soft); color: var(--accent); }
