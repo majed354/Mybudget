@@ -316,6 +316,12 @@ export function applyClassification(transactions, rules = [], own = {}) {
       // شحنُ محفظتك (STC Pay، برق…) نقلُ مالٍ لا صرف — ما دمت وسمتها بذلك
       if (t.merchantKey && ownMerchants.has(t.merchantKey)) t.type = 'internal';
     }
+    // ما عرفته طبقة الرسائل من نصّ الإشعار — أن الطرف حسابُك، أو أنها سدادُ
+    // بطاقتك — علمٌ لا يبلغه التصنيف من نصّ الكشف. ولولا نقله إلى النوع هنا
+    // لأعاد التصنيف وسمَها «حوالة صادرة»، ثم محا `markExclusions` استبعادها
+    // ولم يُعده — فيُحتسب التحويل مع المشتريات التي موّلها، أي الريال مرتين.
+    // وبجعله نوعًا يخضع لنقطة التحوّل كسائر الداخلي، فلا يشذّ عن القاعدة.
+    if (t.selfTransfer) t.type = 'internal';
     if (t.categorySource === 'user') continue;
     const rule = sorted.find((r) => ruleMatches(r, t));
     if (rule) { t.category = rule.category; t.categorySource = 'rule'; t.ruleId = rule.id; continue; }

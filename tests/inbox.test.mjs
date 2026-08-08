@@ -98,3 +98,40 @@ test('معرّف الصندوق يتطابق بين رمزٍ نقيّ وآخر �
   assert.equal(await boxIdFor(glued), await boxIdFor(clean));
   assert.notEqual(await boxIdFor(clean), await boxIdFor(newSecret()));
 });
+
+// ── الوصل بين طبقة الرسائل ومحرّك الاستبعاد ───────────────────────────────
+// طبقة الرسائل تعرف من النصّ أن الطرف حسابُك، والتصنيف يعيد حساب النوع من
+// النصّ نفسه فلا يعرف ذلك. واختبارُ الطبقة وحدها كان يمرّ بينما تنكسر الدورة.
+
+test('الحوالة إلى حسابك تبقى مستبعدة عبر الدورة كاملة لا في طبقة الرسائل وحدها', async () => {
+  const { applyClassification } = await import('../src/classify.js');
+  const { markExclusions } = await import('../src/analytics.js');
+  const sms = 'حوالة محلية صادرة مقبولة\nالى:حسابي في الراجحي\nمبلغ:5000 SAR\nفي:2026/09/10 18:23';
+  const t = smsToTransaction(parseBankSMS(sms, { sender: 'BankAlbilad' }), { id: 'm1', text: sms });
+  const list = [t];
+  applyClassification(list);
+  markExclusions(list, { analysis: {} });
+  assert.equal(list[0].type, 'internal', 'وإلا عاد نوعها «حوالة صادرة» فمُحي استبعادها');
+  assert.equal(list[0].excluded, true, 'وإلا حُسب التحويل مع المشتريات التي موّلها');
+});
+
+test('حوالة الرسائل إلى حسابك تخضع لنقطة التحوّل كسائر الداخلي', async () => {
+  const { applyClassification } = await import('../src/classify.js');
+  const { markExclusions } = await import('../src/analytics.js');
+  const mk = (d) => {
+    const sms = `حوالة محلية صادرة مقبولة\nالى:حسابي في الراجحي\nمبلغ:5000 SAR\nفي:${d} 18:23`;
+    return smsToTransaction(parseBankSMS(sms, { sender: 'BankAlbilad' }), { id: `m${d}`, text: sms });
+  };
+  const list = [mk('2026/06/10'), mk('2026/09/10')];
+  applyClassification(list);
+  markExclusions(list, { analysis: { ownTransfersSpendUntil: '2026-08-09' } });
+  assert.equal(list[0].excluded, false, 'قبل التحوّل: التحويل هو الصرف');
+  assert.equal(list[1].excluded, true, 'بعده: التفصيل يصل من الرسائل فيُستبعد التحويل');
+});
+
+test('سداد فاتورة البطاقة بصيغة الراجحي يُعرف فلا يُحسب مع مشترياتها', () => {
+  const p = parseBankSMS('خصم مستحقات البطاقات الائتمانية\nمبلغ: 2984.44 SAR\nفي: 06/08/2026');
+  assert.equal(p.kind, 'card_payment');
+  const t = smsToTransaction(p, { id: 'c1', text: 'x' });
+  assert.equal(t.excluded, true);
+});

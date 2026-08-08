@@ -165,6 +165,9 @@ export function smsToTransaction(parsed, msg, accountLabel = 'من الرسائ�
     ref: parsed.ref || null,
     excluded: isInternal,
     excludeReason: isInternal ? 'internal' : null,
+    // يبقى مع العملية لأن التصنيف لاحقًا يعيد حساب النوع من النصّ، ولا يعرف
+    // ما عرفته هذه الطبقة: أن المستفيد أنت، أو أنها سدادُ بطاقتك
+    selfTransfer: isInternal,
     amount: Math.round(signed * 100) / 100,
     balance: parsed.balance ?? null,
     category: null,
