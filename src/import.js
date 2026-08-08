@@ -317,7 +317,10 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * هذا برهان حسابي على أن الاستيراد لم يفقد صفًّا ولم يقلب إشارة.
  */
 export function verifyBalances(list) {
-  const withBal = list.filter((t) => isFinite(t.balance));
+  // `Number.isFinite` لا `isFinite`: العالمية تُحوّل قبل الفحص، و`null` عندها
+  // صفرٌ منتهٍ. فكشفٌ بلا عمود رصيد كان يُقرأ كأن كل صفوفه برصيد صفر، فتخرج
+  // فروقٌ بعدد صفوفه — إنذارُ خطأٍ كاذب في أداةٍ حجّتها تدقيق الأرصدة.
+  const withBal = list.filter((t) => Number.isFinite(t.balance));
   if (withBal.length < 3) return { checked: false, ok: true, mismatches: 0, total: 0 };
   let mismatches = 0;
   for (let i = 1; i < withBal.length; i++) {

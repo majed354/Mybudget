@@ -15,6 +15,7 @@ export const TYPES = {
   internal:       { ar: 'تحويل بين حساباتي', icon: '🔄' },
   fee:            { ar: 'رسوم بنكية', icon: '✂️' },
   salary:         { ar: 'راتب', icon: '💰' },
+  refund:         { ar: 'استرجاع', icon: '↩️' },
   other:          { ar: 'أخرى', icon: '•' },
 };
 
@@ -22,7 +23,10 @@ const TYPE_RULES = [
   [/تحويل من حساب (لحساب|الى حساب)|بين حسابات العميل|own\s*account/i, 'internal'],
   [/رواتب|payroll|salary/i, 'salary'],
   [/نقاط بيع|نقاط البيع|point of sale|\bpos\b/i, 'pos'],
-  [/شراء بواسطة الأنترنت|تجارة الكترونية|e-?commerce|online purchase/i, 'ecom'],
+  // «مشتريات إنترنت» صيغة البلاد، و«شراء إنترنت» صيغة الراجحي وstc
+  [/شراء بواسطة ال[أا]نترنت|مشتريات ?[إا]نترنت|شراء ?[إا]نترنت|عملية ?[إا]نترنت|تجارة الكترونية|e-?commerce|online purchase/i, 'ecom'],
+  // الاسترجاع النقدي واردٌ لا صرف
+  [/استرجاع نقدي|كاش باك|cashback/i, 'refund'],
   [/سحب آلي|سحب نقدي|صراف|\batm\b/i, 'atm_out'],
   [/(ايداع|إيداع) نقدي|cash deposit/i, 'cash_in'],
   [/رسوم|عمولة|\bcharge\b|\bfee\b/i, 'fee'],
@@ -36,8 +40,11 @@ const TYPE_RULES = [
 
 export function classifyType(desc, amount, bankType) {
   const d = `${bankType || ''} ${desc || ''}`;
-  // «سداد» تفصيل: قسط تمويل ≠ فاتورة ≠ رسوم
-  if (/سداد|دفع فاتورة/.test(d)) {
+  // «سداد» تفصيل: قسط تمويل ≠ فاتورة ≠ رسوم ≠ سداد بطاقتك
+  if (/سداد|دفع فاتورة|خصم مستحقات/.test(d)) {
+    // سدادُ بطاقتك من حسابك نقلٌ بين أداتين لك، والإنفاق سُجّل يوم الشراء.
+    // ولولا عدُّه داخليًّا لاحتُسب مع مشتريات البطاقة نفسها التي يسدّدها.
+    if (/بطاقة|بطاقه|البطاقات|المديونية|المديونيه/.test(d)) return 'internal';
     if (/قسط|تمويل/.test(d)) return 'loan';
     if (/رسوم/.test(d)) return 'fee';
     if (/فاتورة/.test(d)) return 'bill';
@@ -129,6 +136,9 @@ export function extractMerchant(t) {
   let name = clean(`${head} ${tail}`);
   // السطر الأول في التفاصيل هو نوع العملية، فنتخطّاه — إلا أن يكون النص سطرًا واحدًا
   if (!name) name = clean(lines.length > 1 ? lines.slice(1).join(' ') : lines.join(' '));
+  // «مشتريات انترنت - OPENAI»: بعض الكشوف تسبق الاسمَ بعبارة النوع وفاصلة.
+  // وبقاؤها يفسد تجميع التاجر ويمنع مطابقة القاموس، فتُقطع ويبقى الاسم.
+  name = name.replace(/^\s*(?:مشتريات|شراء|سحب|سداد|حوالة|حواله|امر مستديم|استرجاع|قسط)[^-–—]*[-–—]\s*/u, '').trim();
   return { name, city, channel };
 }
 
@@ -217,12 +227,18 @@ const MERCHANT_RULES = [
   [/SNAP ?FIN|SULFAH|TAMWEEL|FINANC/i, 'debt'],
   [/RESTURANT|RESTAURANT|REST\b|MATAM|MTAM|BUFFET|BUFET|CAFE|COFFEE|KAHWA|QAHWA|BURGER|PIZZA|SHAWARM|SHAWERM|BROAST|GRILL|MANDI|KABSA|FOUL|FUL\b|TAMIAH|TAAMIAH|MOAJANAT|MUAJANAT|FATEER|JUICE|BEVERAG|CHOCOLA|HALWA|BAKER|MKHBZ|MAKHBAZ|SWEET|HALAWIYAT|ICE ?CREAM|DONUT|KUDU|HERFY|ALBAIK|AL ?BAIK|MCDONALD|STARBUCKS|DUNKIN|BASKIN|SUBWAY|KFC|PAPA JOHN|DOMINO|TAZAJ|MAESTRO|BARN|DOSE|HALF ?MILLION|JAVA|CAFETERIA|KAFETERIA|MHAMES|MANAQISH|MNAQISH|MANTO|MKHA\b|MOKHA|HALAWANI|BISCOTI|BISCUIT|ZAFARAN|CATERING|FRIED FOOD|HANEETH|HANITH|MATEAM|MTAAM|MATAAM|SHABYAT|ALSHABYAT|SNABEL|SANABEL|SHAWAYA|MALHAM|ALKALDAH|MOKHTAR ALSHAM|JAVA|DIWANIYA|مطعم|مطاعم|كافيه|قهوة|مخبز|حلويات|بوفيه|عصير|مشويات|بيت المعجنات/i, 'dining'],
   [/PHARMAC|SAIDALIA|SYDLIA|NAHDI|DAWAA|AL ?DAWAA|WHITES|HOSPITAL|MUSTASHFA|CLINIC|MAJMA TIBBI|MEDICAL|DENTAL|OPTICAL|OPTIC|NAZARAT|LAB\b|MOKHTABAR|صيدلي|مستشفى|عيادة|طبي|مختبر|أسنان/i, 'health'],
+  // تجّار عرّفهم صاحب النسخة بأسمائهم المقتطعة كما تصله من المصرف:
+  // RKAEZ = سوبرماركت آي مارت، BAJH = محل مكسرات، durah alb = درة البحيرات
+  [/RKAEZ|BAJH|DURAH ?ALB|DRAH ?ALB/i, 'groceries'],
   [/MARKET|SUPERMARKET|HYPER|BAQALA|BAKALA|TAMWEEN|TMWYNAT|TAMWINAT|FOODSTUFF|GROCER|MHAMS|MHAMES ARD|TAHON|TAHOON|TMWENAT|TMWYNAT|TAMWINAT|\bMKT\b|KHAYRAT|BAKALAH|BQALA|PANDA|OTHAIM|TAMIMI|CARREFOUR|LULU|DANUBE|BINDAWOOD|MANUEL|NESTO|FARM SUPER|SPAR|أسواق|بقالة|تموينات|سوبرماركت|هايبر|مواد غذائية/i, 'groceries'],
   [/SASCO|ALDREES|AL ?DREES|PETROL|GAS ?STATION|MAHATA|BENZIN|FUEL|ARAMCO|SAPTCO|UBER|CAREEM|JEENY|TAXI|LIMO|PARKING|MAWQIF|TOLL|SPEED TRACK|CAR WASH|GHASEEL|\bGS\b|DOKAN CAR|GAS ?ST|TIRE|KAWTCH|WORKSHOP|WARSHA|SPARE PART|QITA GHIAR|محطة|وقود|بنزين|مواصلات|أجرة|غسيل سيارات|قطع غيار|ورشة/i, 'transport'],
   [/LAUNDR|LAUNDER|MAGHSALA|MGHSL|DRY ?CLEAN|CLEANING|NADAFA|MAINTENANCE|SIANA|PLUMB|ELECTRIC[A-Z]* SERVICE|CARPENT|NAJAR|مغسلة|تنظيف|صيانة|سباك|نجار|كهربائي/i, 'services'],
   [/STC|MOBILY|ZAIN|SALAM|GO TELECOM|TELECOM|JAWWAL|شحن رصيد|اتصالات|موبايلي|زين|سوا/i, 'telecom'],
   [/JARIR|\bEXTRA\b|XCITE|APPLE STORE|ITUNES|APP STORE|SAMSUNG|HUAWEI|LAPTOP|COMPUTER|MOBILE SHOP|JAWALAT|COPUTAR|COMPUTAR|جرير|اكسترا|إلكترونيات|جوالات|حاسب/i, 'tech'],
-  [/NETFLIX|SPOTIFY|SHAHID|OSN|STARZ|GOOGLE|APPLE\.COM|ITUNES|PLAYSTATION|XBOX|STEAM|GAME|CINEMA|MUVI|VOX|AMC|ENTERTAIN|MALAHI|THEME PARK|سينما|ترفيه|ملاهي|اشتراك/i, 'subs'],
+  // الذكاء الاصطناعي والخدمات السحابية: اشتراكاتٌ شهرية كسائر الاشتراكات
+  [/OPENAI|ANTHRO|CLAUDE|MIDJOURNEY|PERPLEXITY|CURSOR|COPILOT|GITHUB|VERCEL|NETLIFY|CLOUDFLARE|DIGITALOCEAN|\bAWS\b|AMAZON WEB|GOOGLE CLOUD|AZURE|HEROKU|SUPABASE|NOTION|FIGMA|CANVA/i, 'subs'],
+  [/UDEMY|COURSERA|\bEDX\b|SKILLSHARE|PLURALSIGHT|DATACAMP|KHAN ACADEMY/i, 'education'],
+  [/NETFLIX|SPOTIFY|SHAHID|OSN|STARZ|GOOGLE|\bAPPLE\b|APPLE\.COM|ITUNES|PLAYSTATION|XBOX|STEAM|GAME|CINEMA|MUVI|VOX|AMC|ENTERTAIN|MALAHI|THEME PARK|سينما|ترفيه|ملاهي|اشتراك/i, 'subs'],
   [/GYM|FITNESS|SPORT|NADI|PADEL|FOOTBALL|MALAB|SWIM|YOGA|BODY|نادي|رياض|لياقة|ملعب|بادل/i, 'sports'],
   [/HOTEL|FUNDUQ|RESORT|MUNTAJA|BOOKING|AIRLINE|AIRWAYS|FLYNAS|FLYADEAL|SAUDIA|AIRPORT|TRAVEL|SIYAHA|TOURISM|فندق|منتجع|طيران|مطار|سفر|سياحة/i, 'travel'],
   [/MALL|FASHION|BOUTIQUE|CLOTH|MALABES|TEXTILE|QUMASH|SHOES|AHDIYA|PERFUME|OUD|ATTAR|OTOOR|COSMETIC|MAKEUP|BEAUTY|SALON|HALAQA|BARBER|MOZAYIN|GOLD|DHAHAB|JEWEL|MOJAWHARAT|WATCH|SAAT|FURNITURE|ATHATH|MSHGHAL|MSHGHL|MASHGHAL|TAILOR|KHAYYAT|ABAYAT|ALABAYAT|FLOWER|ZOHOOR|WARD\b|CANDLE|LAMSAT|JAMAL EST|MFARSH|MFRSH|ALBARKAH LLMFARSH|HOME ?CENTER|IKEA|SACO|TOYS|أزياء|ملابس|أحذية|عطور|عود|تجميل|صالون|حلاق|ذهب|مجوهرات|أثاث|هدايا/i, 'shopping'],

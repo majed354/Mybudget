@@ -467,3 +467,46 @@ test('شهرٌ بلا عمليات لا يكسر الصورة', async () => {
   assert.equal(m.top.length, 0);
   assert.equal(monthSnapshot(null, { today: '2026-08-03' }), null);
 });
+
+// ── ما كشفه تصدير أغسطس إلى CSV ───────────────────────────────────────────
+
+test('كشفٌ بلا عمود رصيد لا يُنتج إنذار تدقيقٍ كاذبًا', () => {
+  // `isFinite(null)` صحيحة في جافاسكربت، فكان الرصيد المعدوم يُقرأ صفرًا،
+  // فتخرج فروقٌ بعدد الصفوف في أداةٍ حجّتها تدقيق الأرصدة
+  const rows = [
+    ['التاريخ الميلادي', 'البيان', 'مدين', 'دائن'],
+    ['2026-08-02', 'شراء نقاط بيع - SASCO', '110.00', ''],
+    ['2026-08-03', 'شراء نقاط بيع - X', '20.00', ''],
+    ['2026-08-04', 'شراء نقاط بيع - Y', '30.00', ''],
+    ['2026-08-05', 'شراء نقاط بيع - Z', '40.00', ''],
+  ];
+  const res = rowsToTransactions(rows, { account: 'بلا رصيد' });
+  assert.equal(res.transactions.length, 4);
+  assert.equal(res.balanceCheck.checked, false, 'لا رصيد ⇒ لا تدقيق، لا تدقيقٌ فاشل');
+  assert.deepEqual(res.warnings, []);
+});
+
+test('سداد بطاقتك من كشفك تحويلٌ داخلي لا مصروف', () => {
+  assert.equal(classifyType('سداد بطاقة ائتمانية'), 'internal');
+  assert.equal(classifyType('خصم مستحقات البطاقات الائتمانية'), 'internal');
+  // ولا يبتلع سدادَ القسط ولا الفاتورة
+  assert.equal(classifyType('سداد قسط تمويل'), 'loan');
+  assert.equal(classifyType('سداد فاتورة كهرباء'), 'bill');
+});
+
+test('الشراء الإلكتروني يُعرف بصيغ المصارف الثلاثة', () => {
+  for (const d of ['مشتريات انترنت - Keeta', 'مشتريات إنترنت', 'شراء إنترنت', 'عملية انترنت']) {
+    assert.equal(classifyType(d), 'ecom', d);
+  }
+});
+
+test('عبارة النوع تُقطع عن اسم التاجر فيُطابق القاموس', () => {
+  const m = extractMerchant({ desc: 'مشتريات انترنت - OPENAI' });
+  assert.equal(m.name, 'OPENAI', 'وإلا بقيت العبارة فأفسدت تجميع التاجر');
+  assert.equal(guessCategoryFromMerchant('OPENAI'), 'subs');
+  assert.equal(guessCategoryFromMerchant('ANTHRO'), 'subs');
+  assert.equal(guessCategoryFromMerchant('Udemy'), 'education');
+  assert.equal(guessCategoryFromMerchant('RKAEZ ALA'), 'groceries');
+  assert.equal(guessCategoryFromMerchant('BAJH TRAD'), 'groceries');
+  assert.equal(guessCategoryFromMerchant('durah alb'), 'groceries');
+});
