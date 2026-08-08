@@ -29,6 +29,7 @@ const state = {
   accountsSummary: [],
   storage: null,
   sync: { secret: null, lastAt: null, status: '', busy: false },
+  skipSync: false,
   reminders: [],
   inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false },
   notify: { permission: 'default', enabled: false },
@@ -53,6 +54,7 @@ async function boot() {
   state.rules = await getRules();
   state.sync.secret = await db.get('syncSecret', null);
   state.sync.lastAt = await db.get('syncLastAt', null);
+  state.skipSync = await db.get('skipSync', false);
   state.notify.enabled = await db.get('notifyEnabled', false);
   state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
@@ -66,10 +68,33 @@ async function boot() {
   render();
   if (state.sync.secret) {
     state.inbox.boxId = await Inbox.boxIdFor(state.sync.secret);
-    await syncPull({ silent: true });
-    await drainInbox({ silent: true });
+    await refresh({ silent: true });
   }
+  startAutoSync();
   checkReminders();
+}
+
+/**
+ * تحديث متصل: عند فتح التطبيق، وكلما عاد إلى الواجهة، وكل دقيقة وهو ظاهر.
+ * فما تسجّله على جوالك تجده على حاسبك دون أن تضغط شيئًا.
+ */
+function startAutoSync() {
+  const tick = async () => {
+    if (!state.sync.secret || document.hidden || state.sync.busy) return;
+    if (Date.now() - (startAutoSync._at || 0) < 20000) return;   // لا نُرهق الشبكة
+    startAutoSync._at = Date.now();
+    await refresh({ silent: true });
+  };
+  document.addEventListener('visibilitychange', tick);
+  window.addEventListener('focus', tick);
+  window.addEventListener('online', tick);
+  setInterval(tick, 60000);
+}
+
+/** يسحب آخر نسخة ثم يلتقط ما وصل من رسائل البنك. */
+async function refresh(opts = {}) {
+  await syncPull(opts);
+  await drainInbox(opts);
 }
 
 // ── رسائل البنك ───────────────────────────────────────────────────────────
@@ -181,15 +206,21 @@ async function syncPush({ silent = false } = {}) {
 async function syncPull({ silent = false } = {}) {
   if (!state.sync.secret) return;
   state.sync.busy = true;
+  let pushAfter = false;
   try {
+    const local = await exportAll();
     const out = await Sync.pull(state.sync.secret);
+
+    const plan = Sync.planSync(local, out.found ? out.snapshot : null);
+    pushAfter = plan.push;
+
     if (!out.found) {
-      state.sync.status = silent ? '' : 'لا توجد نسخة على الخادم بعد';
-      if (!silent) toast('لا توجد نسخة مخزَّنة لهذا المفتاح', 'warn');
+      state.sync.status = '';
+      if (!silent && !pushAfter) toast('لا توجد نسخة مخزَّنة لهذا الرمز', 'warn');
       return;
     }
-    const merged = Sync.mergeSnapshots(await exportAll(), out.snapshot);
-    const added = merged.transactions.length - state.transactions.length;
+
+    const { merged, added } = plan;
     await importAll(merged, { replace: true });
     state.settings = await getSettings();
     state.rules = await getRules();
@@ -197,6 +228,7 @@ async function syncPull({ silent = false } = {}) {
     state.sync.status = '';
     await db.set('syncLastAt', out.updatedAt);
     await reload();
+
     if (!silent || added > 0) toast(added > 0 ? `وصلت ${added} عملية من جهاز آخر` : 'بياناتك محدَّثة', 'ok');
   } catch (err) {
     state.sync.status = err.message;
@@ -205,6 +237,7 @@ async function syncPull({ silent = false } = {}) {
     state.sync.busy = false;
     render();
   }
+  if (pushAfter) await syncPush({ silent: true });
 }
 
 async function setSyncSecret(secret) {
@@ -272,6 +305,13 @@ function render() {
   const app = document.getElementById('app');
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === state.route));
   const a = state.analysis;
+  // بلا رمز دخول ولا اختيارٍ صريح للعمل محليًا: البوابة أولًا
+  if (!state.sync.secret && !state.skipSync) {
+    app.innerHTML = V.viewGate(state);
+    document.getElementById('banner').innerHTML = '';
+    document.getElementById('gate-code')?.focus();
+    return;
+  }
   let html = '';
   switch (state.route) {
     case 'import': html = V.viewImport(state); break;
@@ -330,6 +370,33 @@ function bindEvents() {
     if (action === 'toggle-exclude') { await toggleExclude(el.dataset.id); return; }
     if (action === 'del-rule') { await delRule(el.dataset.id); return; }
     if (action === 'toggle-own') { await toggleOwn(el.dataset.kind, el.dataset.key); return; }
+    if (action === 'gate-new') {
+      await setSyncSecret(Sync.newSecret());
+      await syncPush();
+      await db.set('skipSync', false);
+      state.skipSync = false;
+      render();
+      return;
+    }
+    if (action === 'gate-skip') {
+      state.skipSync = true;
+      await db.set('skipSync', true);
+      render();
+      return;
+    }
+    if (action === 'sign-out') {
+      if (!confirm('تسجيل الخروج من هذا الجهاز؟ ستُمحى النسخة المحلية، وتبقى نسختك المشفّرة على الخادم وتعود بإدخال الرمز.')) return;
+      await setSyncSecret(null);
+      await db.clearTx();
+      await saveRules([]);
+      state.rules = [];
+      await db.set('skipSync', false);
+      state.skipSync = false;
+      await reload();
+      toast('سُجّل الخروج', 'warn');
+      render();
+      return;
+    }
     if (action === 'inbox-drain') { await drainInbox(); return; }
     if (action === 'inbox-clear') {
       if (!confirm('مسح كل ما في صندوق الرسائل على الخادم؟')) return;
@@ -375,6 +442,24 @@ function bindEvents() {
     if (action === 'export-csv') { downloadCSV(); return; }
     if (action === 'import-json') { pickJSON(); return; }
     if (action === 'wipe') { await wipe(); return; }
+  });
+
+  app.addEventListener('submit', async (e) => {
+    if (e.target.dataset.action !== 'gate-login') return;
+    e.preventDefault();
+    const code = document.getElementById('gate-code')?.value?.trim();
+    if (!code || code.replace(/[\s-]/g, '').length < 12) {
+      state.sync.status = 'الرمز قصير — تأكّد من نسخه كاملًا';
+      render();
+      return;
+    }
+    await setSyncSecret(code);
+    await db.set('skipSync', false);
+    state.skipSync = false;
+    await refresh();
+    if (state.sync.status) { await setSyncSecret(null); render(); return; }
+    toast('أهلًا بك — بياناتك محدَّثة', 'ok');
+    render();
   });
 
   app.addEventListener('change', async (e) => {

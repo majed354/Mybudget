@@ -27,6 +27,37 @@ function empty(msg, action = '') {
   return `<div class="empty"><p>${escapeHTML(msg)}</p>${action}</div>`;
 }
 
+// ── ٠) بوابة الدخول ───────────────────────────────────────────────────────
+// رمزٌ واحد هو الدخول والمفتاح معًا: يفتح بياناتك على أي جهاز، وتحته يجري
+// اشتقاق مفتاح التشفير ومعرّف التخزين — ولا يعرف المستخدم من ذلك شيئًا.
+
+export function viewGate(state) {
+  const hasLocal = state.transactions.length > 0;
+  return `<div class="gate">
+    <div class="gate-card">
+      <div class="gate-mark">﷼</div>
+      <h2>${hasLocal ? 'زامِن بياناتك مع أجهزتك' : 'ادخل إلى ميزانيتك'}</h2>
+      <p class="muted">${hasLocal
+        ? `لديك ${num(state.transactions.length)} عملية على هذا الجهاز. أنشئ رمزًا لترفعها مشفَّرة وتفتحها من جوالك.`
+        : 'أدخل رمزك إن كان لديك واحد، أو أنشئ رمزًا جديدًا. الرمز نفسه هو مفتاح التشفير — لا نملكه ولا نستطيع قراءة بياناتك.'}</p>
+
+      <form class="gate-form" data-action="gate-login">
+        <input id="gate-code" type="text" inputmode="latin" autocomplete="one-time-code"
+          placeholder="XXXX-XXXX-XXXX-…" value="" spellcheck="false">
+        <button class="btn primary" type="submit" ${state.sync?.busy ? 'disabled' : ''}>
+          ${state.sync?.busy ? 'جارٍ…' : 'دخول'}</button>
+      </form>
+      ${state.sync?.status ? `<p class="gate-error">${escapeHTML(state.sync.status)}</p>` : ''}
+
+      <div class="gate-alt">
+        <button class="btn" data-action="gate-new">${hasLocal ? 'أنشئ رمزًا وارفع بياناتي' : 'أنشئ رمزًا جديدًا'}</button>
+        <button class="btn ghost" data-action="gate-skip">تابع على هذا الجهاز فقط</button>
+      </div>
+      <p class="hint">🔒 التشفير يجري في متصفحك. الخادم يخزّن نصًّا مشفَّرًا لا يفهمه، ولا يمكن استرجاع بياناتك إن فقدت الرمز.</p>
+    </div>
+  </div>`;
+}
+
 // ── ١) الاستيراد ──────────────────────────────────────────────────────────
 export function viewImport(state) {
   const p = state.pending;
@@ -509,7 +540,7 @@ export function viewSettings(state, a) {
 
     ${card('التنبيهات', notifyBody(state), { cls: state.notify?.enabled ? 'own' : '' })}
 
-    ${card('المزامنة بين الأجهزة', syncBody(state), { cls: state.sync?.secret ? 'own' : '' })}
+    ${card('رمز الدخول والمزامنة', syncBody(state), { cls: state.sync?.secret ? 'own' : '' })}
 
     ${card('البيانات وأين تُحفظ', `
       <p class="lead">بياناتك محفوظة <strong>داخل هذا المتصفح على هذا الجهاز</strong> فقط — لا خادم ولا حساب ولا مزامنة.
@@ -589,29 +620,22 @@ function notifyBody(state) {
 function syncBody(state) {
   const s = state.sync || {};
   if (!s.secret) {
-    return `<p class="lead">فعّل المزامنة لتفتح بياناتك من الجوال ومن الحاسب ومن أي متصفح.</p>
-      <p class="hint">تُشفَّر بياناتك داخل متصفحك قبل أن تغادره (AES-GCM بمفتاح ٢٥٦ بت)، ولا يصل الخادم إلا نصٌّ مشفَّر
-        ومعرّفٌ مشتقٌّ من مفتاحك بدالة اتجاه واحد. لا نملك مفتاحك، ولا يمكننا قراءة كشوفك — ولا استعادتها إن أضعتَه.</p>
-      <div class="row gap wrap">
-        <button class="btn primary" data-action="sync-enable">فعّل المزامنة وأنشئ مفتاحًا</button>
-        <button class="btn" data-action="sync-link">لديّ مفتاح من جهاز آخر</button>
-      </div>`;
+    return `<p class="lead">تعمل الآن على هذا الجهاز فقط.</p>
+      <button class="btn primary" data-action="gate-new">أنشئ رمز دخول وزامِن</button>`;
   }
   return `
-    <p class="lead">المزامنة مفعّلة. لفتح بياناتك على جهاز آخر: افتح الموقع هناك، ثم «لديّ مفتاح من جهاز آخر»، وألصق هذا المفتاح.</p>
+    <p class="lead">مزامنة تلقائية مفعّلة. افتح الموقع على أي جهاز وأدخل هذا الرمز، فتجد بياناتك كما تركتها.</p>
     <div class="secret-box">
       <code class="secret">${escapeHTML(s.secret)}</code>
       <button class="btn tiny" data-action="sync-copy">نسخ</button>
     </div>
-    <p class="hint">⚠️ احفظ المفتاح في مدير كلمات السرّ. من يملكه يقرأ بياناتك، ومن يفقده يفقدها — لا نسخة لدينا منه.</p>
-    <div class="row gap wrap">
-      <button class="btn primary" data-action="sync-push" ${s.busy ? 'disabled' : ''}>ارفع الآن</button>
-      <button class="btn" data-action="sync-pull" ${s.busy ? 'disabled' : ''}>اسحب من الخادم</button>
-      <button class="btn danger" data-action="sync-off">إيقاف على هذا الجهاز</button>
-    </div>
-    <p class="hint">${s.busy ? 'جارٍ…' : s.lastAt ? `آخر مزامنة: ${escapeHTML(new Date(s.lastAt).toLocaleString('ar-SA'))}` : 'لم تُرفع نسخة بعد'}
+    <p class="hint">⚠️ احفظه في مدير كلمات السرّ. هو مفتاح التشفير نفسه: من يملكه يقرأ بياناتك، ومن يفقده يفقدها — لا نسخة لدينا منه.</p>
+    <p class="hint">${s.busy ? '⟳ جارٍ التحديث…' : s.lastAt ? `✓ آخر تحديث: ${escapeHTML(new Date(s.lastAt).toLocaleString('ar-SA'))}` : 'لم تُرفع نسخة بعد'}
       ${s.status ? `<span class="danger-text"> — ${escapeHTML(s.status)}</span>` : ''}</p>
-    <p class="hint">الرفع يجري تلقائيًا بعد كل تغيير. وإن عدّلت على جهازين، تُدمج العمليات ولا يُدهس وسمُك اليدوي.</p>`;
+    <div class="row gap wrap">
+      <button class="btn" data-action="sync-push" ${s.busy ? 'disabled' : ''}>حدّث الآن</button>
+      <button class="btn danger" data-action="sign-out">تسجيل الخروج من هذا الجهاز</button>
+    </div>`;
 }
 
 function numField(id, label, value, placeholder = '') {

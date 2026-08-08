@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newSecret, encryptSnapshot, decryptSnapshot, mergeSnapshots } from '../src/sync.js';
+import { newSecret, encryptSnapshot, decryptSnapshot, mergeSnapshots , planSync } from '../src/sync.js';
 import { computeReminders, spendPace } from '../src/reminders.js';
 
 test('المفتاح المولَّد عشوائي وبطول كافٍ', () => {
@@ -114,4 +114,44 @@ test('spendPace يقارن الإنفاق حتى اليوم بمثله في ال
 
 test('لا تذكيرات بلا تحليل', () => {
   assert.deepEqual(computeReminders(null, '2026-07-27'), []);
+});
+
+// ── تقارب الجهازين ────────────────────────────────────────────────────────
+const snap = (n, extra = {}) => ({
+  version: 1,
+  exportedAt: extra.at || '2026-08-01T00:00:00Z',
+  transactions: Array.from({ length: n }, (_, i) => ({ hash: `h${i}`, date: '2026-08-01', amount: -10 })),
+  settings: extra.settings || null, rules: extra.rules || [], accounts: {},
+});
+
+test('جهاز ممتلئ وخادم فارغ ⇒ يرفع', () => {
+  const p = planSync(snap(8), null);
+  assert.equal(p.push, true, 'وإلا بقي الجهاز الثاني لا يجد شيئًا');
+  assert.equal(p.merged.transactions.length, 8);
+});
+
+test('جهاز فارغ وخادم فارغ ⇒ لا شيء يُرفع', () => {
+  assert.equal(planSync(snap(0), null).push, false);
+});
+
+test('جهاز فارغ وخادم ممتلئ ⇒ ينزل بلا رفع', () => {
+  const p = planSync(snap(0), snap(8));
+  assert.equal(p.merged.transactions.length, 8);
+  assert.equal(p.added, 8);
+  assert.equal(p.push, false, 'لا داعي لرفع ما هو على الخادم أصلًا');
+});
+
+test('كل طرف فيه ما ليس في الآخر ⇒ يتّحدان ويُرفع الاتحاد', () => {
+  const a = snap(0); a.transactions = [{ hash: 'x1', date: '2026-08-01', amount: -5 }];
+  const b = snap(0); b.transactions = [{ hash: 'x2', date: '2026-08-02', amount: -7 }];
+  const p = planSync(a, b);
+  assert.equal(p.merged.transactions.length, 2);
+  assert.equal(p.push, true, 'الخادم ينقصه ما على الجهاز');
+  assert.equal(p.added, 1);
+});
+
+test('الطرفان متطابقان ⇒ لا رفع ولا تغيير', () => {
+  const p = planSync(snap(5), snap(5));
+  assert.equal(p.push, false);
+  assert.equal(p.added, 0);
 });

@@ -131,6 +131,24 @@ export function mergeSnapshots(local, remote) {
   };
 }
 
+/**
+ * يقرّر ما يلزم فعله ليتطابق الجهاز والخادم.
+ * الحالة التي تُنسى عادةً: جهازٌ ممتلئ وخادمٌ فارغ — إن لم يُرفع منه شيء
+ * بقي الجهاز الثاني لا يجد بيانات مهما أدخل الرمز.
+ * @returns {{merged, push:boolean, added:number}}
+ */
+export function planSync(local, remote) {
+  const localCount = local?.transactions?.length || 0;
+  if (!remote) return { merged: local, push: localCount > 0, added: 0 };
+  const merged = mergeSnapshots(local, remote);
+  const remoteCount = remote.transactions?.length || 0;
+  return {
+    merged,
+    push: merged.transactions.length !== remoteCount,
+    added: merged.transactions.length - localCount,
+  };
+}
+
 function mergeRules(a = [], b = []) {
   const seen = new Map();
   for (const r of [...b, ...a]) {

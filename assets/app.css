@@ -311,3 +311,26 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .steps { margin: 6px 0; padding-inline-start: 20px; font-size: .88rem; }
 .steps li { margin: 5px 0; }
 .steps code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: .85em; }
+
+/* ── بوابة الدخول ──────────────────────────────────────────── */
+.gate { display: grid; place-items: center; min-height: 78vh; padding: 20px; }
+.gate-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: var(--shadow); padding: 30px 26px; max-width: 440px; width: 100%; text-align: center;
+}
+.gate-mark {
+  width: 54px; height: 54px; margin: 0 auto 14px; display: grid; place-items: center;
+  background: var(--accent); color: #fff; border-radius: 15px; font-size: 25px; font-weight: 700;
+}
+.gate-card h2 { font-size: 1.25rem; }
+.gate-card .muted { font-size: .88rem; margin-bottom: 18px; }
+.gate-form { display: flex; gap: 8px; margin-bottom: 10px; }
+.gate-form input {
+  flex: 1; text-align: center; direction: ltr; letter-spacing: .06em;
+  font-size: .95rem; padding: 11px 10px;
+}
+.gate-form button { white-space: nowrap; }
+.gate-error { color: var(--danger); font-size: .84rem; margin: 4px 0 8px; }
+.gate-alt { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 4px; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--fg); }
