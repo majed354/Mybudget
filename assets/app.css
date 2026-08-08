@@ -114,13 +114,22 @@ main { min-width: 0; display: flex; flex-direction: column; }
 .card-body { padding: 14px 18px 18px; }
 .card.preview { border-color: var(--accent); }
 
-.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 13px 15px; box-shadow: var(--shadow);
+  /* بطاقات صفٍّ واحد تتفاوت أطوال نصوصها، والتوزيع يجعل السطر السفلي على
+     خطٍّ واحد في كل البطاقات بدل أن يطفو كلٌّ حيث انتهى نصّه */
+  display: flex; flex-direction: column; justify-content: space-between; gap: 2px;
 }
 .kpi-label { font-size: .78rem; color: var(--muted); }
-.kpi-value { font-size: 1.35rem; font-weight: 700; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+.kpi-value {
+  font-weight: 700; direction: ltr; text-align: right; font-variant-numeric: tabular-nums;
+  /* المبلغ وعملته وحدةٌ واحدة لا تُكسر: على شاشة ٣٧٥ بكسل كان «ر.س» يهبط
+     سطرًا ثانيًا فيقرأ المستخدم رقمًا بلا عملة. والحجم يتقلّص بدل الكسر. */
+  white-space: nowrap;
+  font-size: clamp(1.05rem, 4.6vw, 1.35rem);
+}
 .kpi-sub { font-size: .74rem; color: var(--muted); }
 .kpi.ok .kpi-value { color: var(--ok); }
 .kpi.warn .kpi-value { color: var(--warn); }
@@ -129,7 +138,10 @@ main { min-width: 0; display: flex; flex-direction: column; }
 .alerts { background: var(--surface); border: 1px solid var(--line); border-inline-start: 4px solid var(--warn); border-radius: var(--radius); padding: 10px 16px; }
 .alerts ul { margin: 0; padding-inline-start: 18px; }
 .alerts li { margin: 4px 0; font-size: .88rem; }
-.alerts li.warn { color: var(--warn); font-weight: 600; }
+/* التحذير سطرٌ يُقرأ لا صيحة: اللون وحده يكفي للفت النظر، وتغليظ الجملة
+   كاملةً يُبطئ القراءة — فيبقى الغِلَظ على أوّل جملةٍ فيها الرقم وحدها */
+.alerts li.warn { color: var(--warn); }
+.alerts li.warn > strong:first-child { font-weight: 700; }
 
 /* ── الحقول والأزرار ───────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1 1 165px; }
@@ -270,14 +282,47 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .toast.danger { background: var(--danger); color: #fff; }
 
 /* ── الشاشات الصغيرة ───────────────────────────────────────── */
+/*
+ * التنقّل على الجوال كان شريطًا أفقيًّا أعلى الصفحة غيرَ ثابت: يغيب بمجرّد
+ * التمرير، ويقتطع الكلمات، وقيس فيه أن «الإعدادات» تقع عند س = −٧٦٨ بكسل —
+ * أي خارج الشاشة تمامًا فلا يرى المستخدم أين هو. فنُنزله إلى أسفل الشاشة
+ * ثابتًا: يبلغه الإبهام، ولا يغيب، ويُمرَّر إليه النشط تلقائيًّا.
+ */
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; flex-direction: row; align-items: center; gap: 12px; overflow-x: auto; padding: 12px; }
+  .sidebar {
+    position: sticky; top: 0; z-index: 30; height: auto;
+    flex-direction: row; align-items: center; gap: 10px;
+    padding: 8px 14px; overflow: visible;
+    border-inline-start: 0; border-bottom: 1px solid var(--line);
+  }
   .brand small, .side-foot { display: none; }
-  #nav { flex-direction: row; gap: 6px; }
-  #nav a { white-space: nowrap; padding: 7px 10px; }
+  .brand-mark { width: 30px; height: 30px; font-size: 15px; border-radius: 9px; }
+  .brand strong { font-size: .95rem; }
+
+  #nav {
+    position: fixed; inset-inline: 0; bottom: 0; z-index: 40;
+    flex-direction: row; gap: 0;
+    background: var(--surface); border-top: 1px solid var(--line);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; scrollbar-width: none;
+    box-shadow: 0 -2px 16px rgba(16, 24, 40, .07);
+  }
+  #nav::-webkit-scrollbar { display: none; }
+  #nav a {
+    flex: 0 0 auto; scroll-snap-align: center;
+    flex-direction: column; gap: 1px;
+    min-width: 66px; padding: 6px 8px; border-radius: 12px;
+    font-size: .66rem; white-space: nowrap;
+  }
+  #nav a span { font-size: 1.15rem; line-height: 1.15; }
+
   .two-col { grid-template-columns: 1fr; }
-  .app { padding: 14px; }
+  /* حشوةٌ سفلية بقدر الشريط، وإلّا اختبأ آخر سطرٍ تحته فتعذّر بلوغه */
+  .app { padding: 14px 14px calc(84px + env(safe-area-inset-bottom)); }
+  /* والتنبيه العائم يرتفع فوق الشريط لئلّا يحجبه */
+  .toast { inset-block-end: calc(78px + env(safe-area-inset-bottom)); }
   .hbar-row { grid-template-columns: 110px 1fr 92px; font-size: .8rem; }
   .table { font-size: .8rem; }
 }

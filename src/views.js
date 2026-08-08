@@ -140,10 +140,10 @@ export function viewDashboard(a, state) {
 
   const alerts = [];
   if (a.coverage.ambiguousShare > 0.20) {
-    alerts.push(`<li class="warn">${pct(a.coverage.ambiguousShare)} من صرفك «غامض» (${money(a.coverage.ambiguousAmount)}): سحب نقدي وتحويلات لأشخاص وغير مصنّف.
+    alerts.push(`<li class="warn"><strong>${pct(a.coverage.ambiguousShare)} من صرفك «غامض» (${money(a.coverage.ambiguousAmount)}):</strong> سحب نقدي وتحويلات لأشخاص وغير مصنّف.
       يُحتسب اليوم إنفاقًا مرنًا، فيقسو حكم الأريحية. <button class="btn tiny" data-action="go-tag">صنّفه</button> — إن كان ادخارًا أو التزامًا فسيتغيّر الحكم جوهريًا.</li>`);
   } else if (a.coverage.uncategorizedShare > 0.10) {
-    alerts.push(`<li class="warn">${pct(a.coverage.uncategorizedShare)} من صرفك غير مصنّف (${money(a.coverage.uncategorizedAmount)}). <button class="btn tiny" data-action="go-tag">صنّفه الآن</button> لتدقّ نتيجة الملاءة.</li>`);
+    alerts.push(`<li class="warn"><strong>${pct(a.coverage.uncategorizedShare)} من صرفك غير مصنّف (${money(a.coverage.uncategorizedAmount)}).</strong> <button class="btn tiny" data-action="go-tag">صنّفه الآن</button> لتدقّ نتيجة الملاءة.</li>`);
   }
   if (a.excluded.internal.length) alerts.push(`<li>استُبعد ${num(a.excluded.internal.length)} تحويلًا بين حساباتك — نقلُ مالٍ لا صرف.</li>`);
   if (a.excluded.reversal.length) alerts.push(`<li>استُبعدت ${num(a.excluded.reversal.length)} عملية مرتجعة (صادرة ثم مرتدّة بالمبلغ نفسه).</li>`);

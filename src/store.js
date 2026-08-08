@@ -114,6 +114,15 @@ export const DEFAULT_SETTINGS = {
   ui: { theme: 'auto' },
 };
 
+/**
+ * ختمُ آخر تغييرٍ فعلي في الإعدادات والقواعد والحسابات.
+ * الدمج كان يرجّح بـ`exportedAt`، وهو يُختم لحظةَ التصدير — فالنسخة المحلية
+ * أحدثُ دائمًا بحكم التعريف، فلا يصل الجهازَ شيءٌ ممّا ضبطتَه على الآخر:
+ * وسمُ حساباتك، وسقوفُ سياستك، وقواعدُك. فنختم لحظةَ الحفظ لا لحظة التصدير.
+ */
+export async function touchSettings() { return db.set('settingsAt', new Date().toISOString()); }
+export async function getSettingsAt() { return db.get('settingsAt', null); }
+
 export async function getSettings() {
   const s = await db.get('settings', null);
   return deepMerge(DEFAULT_SETTINGS, s || {});
@@ -122,6 +131,7 @@ export async function saveSettings(patch) {
   const cur = await getSettings();
   const next = deepMerge(cur, patch);
   await db.set('settings', next);
+  await touchSettings();
   return next;
 }
 
@@ -137,21 +147,67 @@ export function deepMerge(a, b) {
 
 // ── قواعد التصنيف التي يبنيها المستخدم ────────────────────────────────────
 export async function getRules() { return (await db.get('rules', [])) || []; }
-export async function saveRules(rules) { return db.set('rules', rules); }
+export async function saveRules(rules) { await db.set('rules', rules); return touchSettings(); }
 
 // ── الحسابات ──────────────────────────────────────────────────────────────
 export async function getAccounts() { return (await db.get('accounts', {})) || {}; }
-export async function saveAccounts(map) { return db.set('accounts', map); }
+export async function saveAccounts(map) { await db.set('accounts', map); return touchSettings(); }
+
+// ── شواهد الحذف ───────────────────────────────────────────────────────────
+/**
+ * ما حذفتَه يجب أن يبقى محذوفًا.
+ * الدمج اتحادٌ بالبصمة، فلولا شاهدٌ على الحذف لعادت العملية من الجهاز الآخر:
+ * وأخطرُ صورةٍ لذلك أن تُطابَق عمليةٌ معلَّقة من رسالة البنك بنظيرتها في
+ * الكشف فتُحذف المعلَّقة، ثم يعيدها الجهاز الآخر — فيُحتسب المبلغ مرتين.
+ * ولا يكبر السجلّ بلا حدّ: يُقلَّم ما جاوز ١٨٠ يومًا.
+ */
+const TOMBSTONE_DAYS = 180;
+
+export async function getDeleted() { return (await db.get('deleted', {})) || {}; }
+
+export async function rememberDeleted(hashes) {
+  const list = [...hashes].filter(Boolean);
+  if (!list.length) return;
+  const map = await getDeleted();
+  const now = new Date().toISOString();
+  for (const h of list) map[h] = now;
+  return db.set('deleted', pruneDeleted(map));
+}
+
+/**
+ * يرفع شاهد الحذف عمّا استُورد من جديد.
+ * الاستيراد فعلٌ صريح من المستخدم، فهو أعلى من شاهدٍ قديم: بلا هذا الرفع
+ * لَاختفت العملية بعد أول مزامنة، ولَبدا أن الاستيراد ابتلعها.
+ */
+export async function forgetDeleted(hashes) {
+  const list = [...hashes].filter(Boolean);
+  if (!list.length) return;
+  const map = await getDeleted();
+  let touched = false;
+  for (const h of list) if (h in map) { delete map[h]; touched = true; }
+  if (touched) await db.set('deleted', map);
+}
+
+export function pruneDeleted(map, now = Date.now()) {
+  const cutoff = now - TOMBSTONE_DAYS * 86400000;
+  const out = {};
+  for (const [h, at] of Object.entries(map || {})) {
+    if (Date.parse(at) >= cutoff) out[h] = at;
+  }
+  return out;
+}
 
 // ── تصدير/استيراد نسخة كاملة ──────────────────────────────────────────────
 export async function exportAll() {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
+    settingsAt: await getSettingsAt(),
     transactions: await db.allTx(),
     settings: await getSettings(),
     rules: await getRules(),
     accounts: await getAccounts(),
+    deleted: await getDeleted(),
   };
 }
 
@@ -160,7 +216,11 @@ export async function importAll(payload, { replace = false } = {}) {
   if (replace) await db.clearTx();
   await db.putMany(payload.transactions);
   if (payload.settings) await db.set('settings', payload.settings);
-  if (payload.rules) await saveRules(payload.rules);
-  if (payload.accounts) await saveAccounts(payload.accounts);
+  if (payload.rules) await db.set('rules', payload.rules);
+  if (payload.accounts) await db.set('accounts', payload.accounts);
+  if (payload.deleted) await db.set('deleted', pruneDeleted(payload.deleted));
+  // ختم النسخة الواردة يُنقل كما هو: لو خُتم بالآن لبدا الجهاز أحدثَ ممّا هو
+  // في كل دمجٍ تالٍ، فعاد العطب الذي أُصلح — وغياب الختم يعني «لا نعلم».
+  if (payload.settingsAt) await db.set('settingsAt', payload.settingsAt);
   return payload.transactions.length;
 }

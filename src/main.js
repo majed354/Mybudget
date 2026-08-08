@@ -1,6 +1,6 @@
 // مُنسّق التطبيق: حالة واحدة، توجيه بالهاش، وتفويض الأحداث.
 
-import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence } from './store.js';
+import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence, rememberDeleted, forgetDeleted } from './store.js';
 import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from './import.js';
 import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
 import { analyze } from './analytics.js';
@@ -28,7 +28,7 @@ const state = {
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
   storage: null,
-  sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null },
+  sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
   inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false },
@@ -141,6 +141,9 @@ async function reconcilePending() {
   const { drop, updates } = Inbox.applyReconciliation(matched);
   for (const id of drop) await db.remove(id);
   for (const u of updates) await db.put(stripRuntime(u));
+  // أخطر حذفٍ يجب أن يبقى: المعلَّقة التي طوبقت بنظيرتها في الكشف. لو عادت
+  // من الجهاز الآخر لحُسب المبلغ مرتين — مرةً من الرسالة ومرةً من الكشف.
+  await rememberDeleted(pending.filter((p) => drop.has(p.id)).map((p) => p.hash));
   await reload();
   return drop.size;
 }
@@ -192,11 +195,21 @@ async function syncPush({ silent = false } = {}) {
     const out = await Sync.push(state.sync.secret, await exportAll());
     state.sync.lastAt = out.updatedAt;
     state.sync.status = '';
+    state.sync.size = out.size;
+    // ما رُفع الآن هو ما على الجهاز، فيتساوى العدّادان دون انتظار سحبةٍ لاحقة
+    state.sync.remoteCount = state.transactions.length;
+    syncPush._lastError = '';
     await db.set('syncLastAt', out.updatedAt);
     if (!silent) toast('رُفعت نسخة مشفّرة', 'ok');
   } catch (err) {
+    // فشلُ الرفع يعني أن الخادم بقي على نسخةٍ قديمة وأن جهازك الآخر لن يرى
+    // شيئًا. ابتلاعُه في المسار التلقائي هو ما أبقى المزامنة معطَّلة بلا أثر
+    // ظاهر: كان الخطأ يُسجَّل في شاشة الإعدادات وحدها ولا ينبّه أحدًا.
+    // فنُنبّه ولو كان المسار صامتًا، ولا نكرّر التنبيه ما دام الخطأ نفسه.
     state.sync.status = err.message;
-    if (!silent) toast(err.message, 'danger');
+    const repeated = syncPush._lastError === err.message;
+    syncPush._lastError = err.message;
+    if (!silent || !repeated) toast(`تعذّر رفع نسختك: ${err.message}`, 'danger');
   } finally {
     state.sync.busy = false;
     if (state.route === 'settings') render();
@@ -307,10 +320,50 @@ function recompute() {
   state.gap = gapAnalysis(state.profile, request, state.settings.policy);
 }
 
+/**
+ * يُعلِم الشاشة الحالية في الشريط، ويُمرّره إليها إن كانت خارجه.
+ * على الجوال شريط التنقّل أضيق من عناصره (٥٨٦ بكسل في ٣٧٥)، فكانت الشاشة
+ * المفتوحة تقع خارج المرأى — قيست «الإعدادات» عند س = −١٩٦ — فلا يعرف
+ * المستخدم أين هو. والتمرير يؤجَّل إلى ما بعد الرسم: نداؤه أثناءه يسبق
+ * اتّساع الشريط بالخطوط والأيقونات، فلا يجد ما يُمرّره.
+ */
+function markActiveNav() {
+  const links = document.querySelectorAll('#nav a');
+  let current = null;
+  links.forEach((a) => {
+    const on = a.dataset.route === state.route;
+    a.classList.toggle('active', on);
+    a.setAttribute('aria-current', on ? 'page' : 'false');
+    if (on) current = a;
+  });
+  if (!current) return;
+  const bring = () => {
+    const nav = current.parentElement;
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return;   // لا حاجة على الشاشات الواسعة
+    // لا scrollIntoView: يخطئ مع أوّل عنصرٍ في حاوية RTL فيدفعه خارج الشاشة
+    // (قيس عند س = ٥٠٤). ولا scrollBy: نداؤه مرتين يجمع الإزاحتين فيتجاوز.
+    // نحسب هدفًا مطلقًا؛ وهو ثابتٌ أثناء التمرير نفسه لأن ما يزيد في
+    // scrollLeft ينقص مثله من موضع العنصر، فتكرار النداء يستقرّ ولا يتراكم.
+    const navBox = nav.getBoundingClientRect();
+    const box = current.getBoundingClientRect();
+    const delta = (box.left + box.width / 2) - (navBox.left + navBox.width / 2);
+    if (Math.abs(delta) < 1) return;
+    // فوريٌّ لا ناعم: التمرير الناعم تُحرّكه إطاراتُ الرسم، والمتصفح يجمّدها
+    // والتبويب مخفيّ — جُرّب فبقي scrollLeft صفرًا رغم صحّة الهدف. وهذه
+    // مزامنة موضعٍ لا حركة يقصدها المستخدم، فالفورية أصحّ وأمتن.
+    nav.scrollTo({ left: nav.scrollLeft + delta, behavior: 'instant' });
+  };
+  bring();
+  // شبكة أمان: عند أول رسم قد لا يكون الشريط اتّسع بخطوطه وأيقوناته بعد.
+  // ولا نعتمد requestAnimationFrame: المتصفح يجمّده والتبويب مخفيّ — وقد
+  // يُفتح التطبيق من تنبيهٍ وهو كذلك — فيبقى الشريط على شاشةٍ غير الحالية.
+  setTimeout(bring, 0);
+}
+
 // ── العرض ─────────────────────────────────────────────────────────────────
 function render() {
   const app = document.getElementById('app');
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === state.route));
+  markActiveNav();
   const a = state.analysis;
   // بلا رمز دخول ولا اختيارٍ صريح للعمل محليًا: البوابة أولًا
   if (!state.sync.secret && !state.skipSync) {
@@ -554,6 +607,8 @@ async function confirmImport() {
   const n = state.pending.fresh.length;
   if (!n) { toast('كل العمليات موجودة مسبقًا', 'warn'); state.pending = null; render(); return; }
   await db.putMany(state.pending.fresh);
+  // الاستيراد قصدٌ صريح يرفع أي شاهد حذفٍ سابق على هذه العمليات
+  await forgetDeleted(state.pending.fresh.map((t) => t.hash));
   state.pending = null;
   await reload();
   const merged = await reconcilePending();
@@ -568,6 +623,8 @@ async function dropAccount(account) {
   if (!confirm(`حذف كل عمليات «${account}»؟`)) return;
   const rows = state.transactions.filter((t) => t.account === account);
   for (const r of rows) await db.remove(r.id);
+  // بلا شاهدٍ على الحذف يُعيدها الجهاز الآخر في أول مزامنة
+  await rememberDeleted(rows.map((r) => r.hash));
   await reload();
   toast(`حُذفت ${rows.length} عملية`, 'ok');
   render();

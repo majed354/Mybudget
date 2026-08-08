@@ -36,7 +36,26 @@ async function derive(secret) {
 }
 
 const hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-const b64 = (bytes) => btoa(String.fromCharCode(...bytes));
+
+/**
+ * ترميز البايتات نصًّا قبل btoa — على دفعات، لا بنشرها وسائطَ دفعةً واحدة.
+ *
+ * الفخّ الذي كلّف هذا المشروع مزامنته كلها: `String.fromCharCode(...bytes)`
+ * يمرّر كل بايت وسيطًا مستقلًّا، ولعدد الوسائط سقفٌ في المكدّس (~١٢٤ ألف في
+ * V8، وأقلّ في سفاري). نسخة المستخدم الحقيقية ١٬٠٧٨٬٤٨٨ بايت، فكان الرفع
+ * يرمي RangeError في كل مرة — والخادم يبقى فارغًا، والجهاز الثاني لا يجد شيئًا.
+ * لم تكشفه الاختبارات لأنها كلها بنسخٍ من عشرات البايتات.
+ * ٣٢ ألفًا للدفعة: دون سقف الوسائط في كل المتصفحات بهامشٍ واسع.
+ */
+const b64 = (bytes) => {
+  const CHUNK = 0x8000;
+  let s = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+};
+
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export async function encryptSnapshot(secret, snapshot) {
@@ -76,15 +95,18 @@ async function call(method, id, body) {
     throw new Error('خدمة المزامنة غير متاحة على هذا النطاق — تعمل بعد النشر على نتلفاي');
   }
   const out = await res.json().catch(() => null);
-  if (!out) throw new Error('ردٌّ غير مفهوم من خدمة المزامنة');
+  // ردٌّ بلا JSON يأتي غالبًا من طبقة الاستضافة لا من الدالة (رفضُ حجمٍ مثلًا)،
+  // فنُظهر رمز الحالة ليكون الخطأ قابلًا للتشخيص بدل «غير مفهوم» المبهمة
+  if (!out) throw new Error(`ردٌّ غير مفهوم من خدمة المزامنة (${res.status})`);
   if (!res.ok) throw new Error(out.error || `فشل الطلب (${res.status})`);
   return out;
 }
 
-/** يرفع نسخة مشفّرة. @returns {{updatedAt:string}} */
+/** يرفع نسخة مشفّرة. @returns {{updatedAt:string, size:number}} */
 export async function push(secret, snapshot) {
   const { id, blob } = await encryptSnapshot(secret, snapshot);
-  return call('PUT', id, blob);
+  const out = await call('PUT', id, blob);
+  return { ...out, size: blob.length };
 }
 
 /** يسحب النسخة المخزَّنة ويفكّها. @returns {{found:boolean, snapshot?:object, updatedAt?:string}} */
@@ -101,12 +123,16 @@ export async function remove(secret) {
 }
 
 /**
- * دمج نسختين: العمليات اتحادٌ ببصمتها، وما وسمه المستخدم بيده لا يُدهس.
- * أما الإعدادات والقواعد فتُؤخذ من النسخة الأحدث تصديرًا.
+ * دمج نسختين: العمليات اتحادٌ ببصمتها، وما وسمه المستخدم بيده لا يُدهس،
+ * وما حُذف على أحد الجهازين لا يعود من الآخر.
+ * أما الإعدادات فتُؤخذ من النسخة الأحدث تغييرًا — لا تصديرًا.
  */
 export function mergeSnapshots(local, remote) {
   if (!remote) return local;
   if (!local) return remote;
+
+  // سجلّ الحذف يتّحد من الطرفين: شاهدٌ من أيّ جهازٍ يكفي
+  const deleted = { ...(remote.deleted || {}), ...(local.deleted || {}) };
 
   const byHash = new Map();
   for (const t of remote.transactions || []) byHash.set(t.hash, t);
@@ -117,17 +143,22 @@ export function mergeSnapshots(local, remote) {
     const localWins = t.categorySource === 'user' && other.categorySource !== 'user';
     byHash.set(t.hash, localWins ? t : other);
   }
+  for (const h of Object.keys(deleted)) byHash.delete(h);
 
-  const localNewer = String(local.exportedAt || '') >= String(remote.exportedAt || '');
-  const winner = localNewer ? local : remote;
+  // الختم الصحيح هو لحظة تغيير الإعدادات، لا لحظة تصدير النسخة: الثانية
+  // تُختم في كل تصدير فتجعل المحلّي أحدثَ أبدًا، فلا يصل شيءٌ من الجهاز الآخر
+  const stamp = (s) => String(s?.settingsAt || s?.exportedAt || '');
+  const winner = stamp(local) >= stamp(remote) ? local : remote;
 
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
+    settingsAt: stamp(winner) || null,
     transactions: [...byHash.values()].sort((a, b) => a.date.localeCompare(b.date)),
     settings: winner.settings,
     rules: mergeRules(local.rules, remote.rules),
     accounts: { ...(remote.accounts || {}), ...(local.accounts || {}) },
+    deleted,
   };
 }
 
@@ -142,9 +173,12 @@ export function planSync(local, remote) {
   if (!remote) return { merged: local, push: localCount > 0, added: 0 };
   const merged = mergeSnapshots(local, remote);
   const remoteCount = remote.transactions?.length || 0;
+  // العدد وحده لا يكفي دليلًا على التطابق: قد يحذف الجهاز عمليةً ويضيف أخرى
+  // فيتساوى العددان بينما شاهد الحذف لم يبلغ الخادم بعد فتعود المحذوفة.
+  const newTombstones = Object.keys(merged.deleted || {}).length !== Object.keys(remote.deleted || {}).length;
   return {
     merged,
-    push: merged.transactions.length !== remoteCount,
+    push: merged.transactions.length !== remoteCount || newTombstones,
     added: merged.transactions.length - localCount,
   };
 }
