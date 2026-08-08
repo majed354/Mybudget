@@ -1,6 +1,6 @@
 // واجهات العرض — كل دالة تُعيد HTML، والتفاعل يمرّ عبر data-action.
 
-import { money, num, pct, monthLabel, dateLabel, escapeHTML } from './util.js';
+import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION } from './util.js';
 import { donut, hbars, monthlyChart, stackedBar, gauge, sparkline } from './charts.js';
 import { CATEGORIES, CATEGORY_MAP, TYPES } from './classify.js';
 import { VERDICT, VERDICT_AR, installmentOf, effectiveAPR } from './affordability.js';
@@ -558,7 +558,8 @@ export function viewSettings(state, a) {
         <button class="btn" data-action="import-json">استيراد نسخة</button>
         <button class="btn danger" data-action="wipe">مسح كل البيانات</button>
       </div>
-      <p class="hint">كل شيء محفوظ في متصفحك (IndexedDB). مسح بيانات الموقع يمحوها، فاحتفظ بنسخة إن أردت.</p>`)}
+      <p class="hint">كل شيء محفوظ في متصفحك (IndexedDB). مسح بيانات الموقع يمحوها، فاحتفظ بنسخة إن أردت.</p>
+      <p class="hint muted">نسخة التطبيق: <code>${APP_VERSION}</code> — إن كانت أقدم مما يقوله لك المطوّر فأعد التحميل مرتين.</p>`)}
   </div>`;
 }
 
@@ -630,8 +631,17 @@ function syncBody(state) {
       <button class="btn tiny" data-action="sync-copy">نسخ</button>
     </div>
     <p class="hint">⚠️ احفظه في مدير كلمات السرّ. هو مفتاح التشفير نفسه: من يملكه يقرأ بياناتك، ومن يفقده يفقدها — لا نسخة لدينا منه.</p>
-    <p class="hint">${s.busy ? '⟳ جارٍ التحديث…' : s.lastAt ? `✓ آخر تحديث: ${escapeHTML(new Date(s.lastAt).toLocaleString('ar-SA'))}` : 'لم تُرفع نسخة بعد'}
-      ${s.status ? `<span class="danger-text"> — ${escapeHTML(s.status)}</span>` : ''}</p>
+    <table class="table compact mt">
+      <tbody>
+        <tr><td>على هذا الجهاز</td><td class="ltr"><strong>${num(state.transactions.length)}</strong> عملية</td></tr>
+        <tr><td>على الخادم</td><td class="ltr">${s.remoteCount == null ? '<span class="muted">لم يُفحص بعد</span>'
+          : `<strong class="${s.remoteCount === state.transactions.length ? 'pos' : 'neg'}">${num(s.remoteCount)}</strong> عملية`}</td></tr>
+        <tr><td>آخر تحديث</td><td class="ltr">${s.busy ? '⟳ جارٍ…' : s.lastAt ? escapeHTML(new Date(s.lastAt).toLocaleString('ar-SA')) : '—'}</td></tr>
+      </tbody>
+    </table>
+    ${s.status ? `<p class="hint danger-text">${escapeHTML(s.status)}</p>` : ''}
+    ${s.remoteCount != null && s.remoteCount !== state.transactions.length
+      ? '<p class="hint warn-text">العددان مختلفان — اضغط «حدّث الآن» ليتطابقا.</p>' : ''}
     <div class="row gap wrap">
       <button class="btn" data-action="sync-push" ${s.busy ? 'disabled' : ''}>حدّث الآن</button>
       <button class="btn danger" data-action="sign-out">تسجيل الخروج من هذا الجهاز</button>

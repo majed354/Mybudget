@@ -334,3 +334,4 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .gate-alt { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 4px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
 .btn.ghost:hover { color: var(--fg); }
+.warn-text { color: var(--warn); }

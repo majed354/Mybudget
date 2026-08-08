@@ -28,7 +28,7 @@ const state = {
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
   storage: null,
-  sync: { secret: null, lastAt: null, status: '', busy: false },
+  sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null },
   skipSync: false,
   reminders: [],
   inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false },
@@ -213,11 +213,15 @@ async function syncPull({ silent = false } = {}) {
 
     const plan = Sync.planSync(local, out.found ? out.snapshot : null);
     pushAfter = plan.push;
+    state.sync.foundRemote = out.found;
+    state.sync.remoteCount = out.found ? (out.snapshot.transactions || []).length : 0;
 
     // لا «return» هنا: الرفع يجري بعد الـfinally، والخروج المبكر يقفز فوقه
     if (!out.found) {
       state.sync.status = '';
-      if (!silent && !pushAfter) toast('لا توجد نسخة مخزَّنة لهذا الرمز', 'warn');
+      if (!silent && !pushAfter) {
+        toast('لا توجد نسخة على الخادم لهذا الرمز بعد', 'warn');
+      }
     } else {
       const { merged, added } = plan;
       await importAll(merged, { replace: true });
@@ -236,7 +240,11 @@ async function syncPull({ silent = false } = {}) {
     state.sync.busy = false;
     render();
   }
-  if (pushAfter) await syncPush({ silent: true });
+  if (pushAfter) {
+    await syncPush({ silent: true });
+    state.sync.remoteCount = state.transactions.length;
+    if (state.route === 'settings') render();
+  }
 }
 
 async function setSyncSecret(secret) {
@@ -457,7 +465,11 @@ function bindEvents() {
     state.skipSync = false;
     await refresh();
     if (state.sync.status) { await setSyncSecret(null); render(); return; }
-    toast('أهلًا بك — بياناتك محدَّثة', 'ok');
+    if (state.sync.foundRemote === false && state.transactions.length === 0) {
+      toast('دخلتَ، لكن لا توجد نسخة على الخادم بعد — افتح الجهاز الذي فيه بياناتك واضغط «حدّث الآن»', 'warn');
+    } else {
+      toast(`أهلًا بك — ${state.transactions.length} عملية`, 'ok');
+    }
     render();
   });
 
