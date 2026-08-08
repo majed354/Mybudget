@@ -154,3 +154,37 @@ test('سجلّ الحصاد: يجمع اليوم، ويقلّم القديم، �
   const old = pruneLog({ '2026-08-09': 1, '2025-01-01': 9 }, '2026-08-09');
   assert.deepEqual(Object.keys(old), ['2026-08-09'], 'ما جاوز ثلاثين يومًا يُطرح');
 });
+
+test('اللصق: يفصل الرسائل بسطرٍ فارغ ولا يضاعف ما لُصق مرتين', async () => {
+  const { parsePasted } = await import('../src/inbox.js');
+  const two = `شراء عبر نقاط البيع
+لدى:JAVA JOY C
+مبلغ:74 SAR
+8/8/26 23:23
+
+شراء إنترنت بـSR 237.13
+لـExpress F
+رصيد:8835.8 SR
+8/8/26 20:55`;
+
+  const r = parsePasted(two, { today: '2026-08-09' });
+  assert.equal(r.total, 2, 'السطر الفارغ يفصل، وأسطرُ الرسالة الواحدة لا تلتبس به');
+  assert.equal(r.added.length, 2);
+  assert.equal(r.failed.length, 0);
+  assert.equal(r.added[0].amount, -74);
+  assert.equal(r.added[0].date, '2026-08-08');
+  assert.equal(r.added[1].amount, -237.13);
+
+  // المعرّف من مضمون الرسالة لا من لحظة اللصق: فبصمتها لا تتغيّر بإعادته
+  const again = parsePasted(two, { today: '2026-08-09' });
+  assert.deepEqual(again.added.map((t) => t.hash), r.added.map((t) => t.hash),
+    'وإلا ضاعف اللصقُ الثاني العملياتِ على من ظنّ أن الأول لم ينجح');
+});
+
+test('اللصق يفرز ما لم يُفهم ولا يبتلعه', async () => {
+  const { parsePasted } = await import('../src/inbox.js');
+  const r = parsePasted('شراء عبر نقاط البيع\nلدى:X\nمبلغ:10 SAR\n8/8/26 10:00\n\nكلام لا معنى له', { today: '2026-08-09' });
+  assert.equal(r.added.length, 1);
+  assert.equal(r.failed.length, 1);
+  assert.ok(r.failed[0].reason);
+});

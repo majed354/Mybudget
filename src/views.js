@@ -33,7 +33,9 @@ function card(title, body, { actions = '', cls = '' } = {}) {
  * ويبقى قابلًا للبحث بـCtrl+F، وتفتحه قارئات الشاشة.
  */
 function foldable(title, body, { open = false, hint = '' } = {}) {
-  return `<details class="card fold" ${open ? 'open' : ''}>
+  // مفتاحٌ ثابت من العنوان: الرسم يعيد بناء الشجرة فتُغلق البطاقات كلها،
+  // فيفقد المستخدم موضعه كلما تغيّر شيء — يضغط «حلّلها» فينطوي القسم أمامه.
+  return `<details class="card fold" data-fold="${escapeHTML(title)}" ${open ? 'open' : ''}>
     <summary class="card-head"><h2>${escapeHTML(title)}</h2>${hint ? `<span class="hint">${escapeHTML(hint)}</span>` : ''}</summary>
     <div class="card-body">${body}</div>
   </details>`;
@@ -738,6 +740,7 @@ function inboxBody(state) {
 
     <div class="row gap wrap">
       <button class="btn primary" data-action="inbox-drain" ${i.busy ? 'disabled' : ''}>اسحب الرسائل الآن</button>
+      <button class="btn" data-action="paste-open">الصق رسائل فائتة</button>
       <button class="btn" data-action="reconcile">طابِق المعلَّقات بالكشف</button>
       <button class="btn danger" data-action="inbox-clear">امسح الصندوق</button>
     </div>
@@ -765,8 +768,54 @@ function inboxBody(state) {
       <p class="hint">تبقى في الصندوق و<strong>تُعاد محاولة تحليلها في كل سحب</strong> — فإن كان شكلها قد أُضيف
         في نسخةٍ أحدث، حدّث الصفحة ثم اسحب فتُفهم. وإن بقيت، انسخها وأرسلها لأضيف شكلها.
         <br>النسخة العاملة الآن على هذا الجهاز: <code>${escapeHTML(APP_VERSION)}</code>.</p>` : ''}
+    ${pasteBody(state)}
     <p class="hint">🔒 نصّ الرسالة يمكث في الصندوق حتى يسحبه التطبيق فيُمسح فورًا، وما لم يُسحب يُمسح تلقائيًا بعد ٧٢ ساعة.
       ولا يُمسّ شيء من رسائلك في جوالك.</p>`;
+}
+
+/**
+ * لصق الرسائل الفائتة: نصٌّ يُلصق، ويُعرض ما فُهم منه قبل اعتماده.
+ * لا يُعتمد شيءٌ بلا معاينة: الرقم الذي يدخل حسابك بلا أن تراه أخطرُ من
+ * رقمٍ لا يدخل.
+ */
+function pasteBody(state) {
+  const p = state.paste;
+  if (!p) return '';
+  return `
+    <h3>الصق رسائل فائتة</h3>
+    <p class="hint">انسخ الرسالة من تطبيق الرسائل والصقها هنا. ولعدّة رسائل: افصل بينها
+      <strong>بسطرٍ فارغ</strong>. ولا يغادر النصّ متصفحك — لا يمرّ بخادم ولا يُشفَّر ولا ينتظر.</p>
+    <textarea id="paste-text" rows="6" placeholder="شراء عبر نقاط البيع&#10;لدى:JAVA JOY C&#10;مبلغ:74 SAR&#10;8/8/26 23:23">${escapeHTML(p.text || '')}</textarea>
+    <div class="row gap wrap mt">
+      <button class="btn primary" data-action="paste-parse">حلّلها</button>
+      ${p.result ? `<button class="btn" data-action="paste-clear">أفرغ</button>` : ''}
+    </div>
+    ${p.result ? pasteResult(p.result) : ''}`;
+}
+
+function pasteResult(r) {
+  return `
+    <div class="row wrap gap mt">
+      ${kpi('فُهمت', num(r.added.length), { tone: r.added.length ? 'ok' : '' })}
+      ${kpi('جديدة', num(r.fresh.length), { tone: r.fresh.length ? 'ok' : 'warn' })}
+      ${kpi('مكررة', num(r.dups.length), { tone: r.dups.length ? 'warn' : '' })}
+      ${kpi('لم تُفهم', num(r.failed.length), { tone: r.failed.length ? 'danger' : '' })}
+    </div>
+    ${r.fresh.length ? `<ul class="tx-list mt">${r.fresh.map((t) => `<li class="tx-row">
+      <div class="tx-main">
+        <span class="tx-title">${escapeHTML(t.merchantHint || TYPES[t.smsKind]?.ar || 'عملية')}</span>
+        <span class="tx-amount ltr ${t.amount < 0 ? 'neg' : 'pos'}">${money(t.amount)}</span>
+      </div>
+      <div class="tx-meta"><span class="ltr">${dateLabel(t.date)}</span>
+        <span>${TYPES[t.smsKind]?.icon || ''} ${escapeHTML(TYPES[t.smsKind]?.ar || '')}</span>
+        ${t.excluded ? '<span class="tag amb">مستبعد: تحويل داخلي</span>' : ''}</div>
+    </li>`).join('')}</ul>` : ''}
+    ${r.failed.length ? `<ul class="failed-list mt">${r.failed.map((f) => `<li>
+      <div class="fl-head"><span class="tag amb">${escapeHTML(f.reason || '')}</span></div>
+      <pre class="fl-text">${escapeHTML(f.text)}</pre></li>`).join('')}</ul>` : ''}
+    ${r.fresh.length ? `<div class="row gap end mt">
+      <button class="btn primary" data-action="paste-commit">اعتمد ${num(r.fresh.length)} عملية</button>
+    </div>` : r.added.length ? '<p class="hint">كلها موجودة عندك مسبقًا — لا جديد يُضاف.</p>' : ''}`;
 }
 
 /**

@@ -35,6 +35,7 @@ const state = {
   reminders: [],
   inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
+  paste: null,                // لصق الرسائل الفائتة: النصّ ونتيجة تحليله
   busy: false,
 };
 
@@ -231,6 +232,7 @@ function publishWidget() {
     } catch (err) {
       state.widgetError = err.message;
     }
+    bindDrainButton.sync?.();
     if (state.route === 'settings') render();
   }, 1500);
 }
@@ -266,6 +268,7 @@ async function syncPush({ silent = false } = {}) {
     if (!silent || !repeated) toast(`تعذّر رفع نسختك: ${err.message}`, 'danger');
   } finally {
     state.sync.busy = false;
+    bindDrainButton.sync?.();
     if (state.route === 'settings') render();
   }
 }
@@ -310,6 +313,7 @@ async function syncPull({ silent = false } = {}) {
   if (pushAfter) {
     await syncPush({ silent: true });
     state.sync.remoteCount = state.transactions.length;
+    bindDrainButton.sync?.();
     if (state.route === 'settings') render();
   }
 }
@@ -408,30 +412,39 @@ function recompute() {
 }
 
 /**
- * سحب الرسائل في الترويسة: فعلٌ يُكرَّر في اليوم مرات، فمكانه مع أقرب
- * الأزرار لا في قاع الإعدادات خلف بطاقةٍ مطويّة.
+ * زرٌّ واحد في الترويسة يُتمّ الدورة كلها: يسحب نسختك من الخادم، ويلتقط
+ * رسائل مصرفك، ويرفع ما تغيّر.
  *
- * وعليه علامةٌ حين ينتظر في الصندوق ما يصير عمليةً — ولا تُحتسب فيها رموزُ
- * التحقّق ولا ما لم يُفهم: تلك ليست عملياتٍ تنتظر، وعلامةٌ لا تزول بالضغط
- * أسوأ من لا علامة. والسحب تلقائيّ أصلًا، فلا تظهر إلا حين يتعذّر.
+ * وكان كلٌّ من هذه في موضع: المزامنة في قاع الإعدادات خلف بطاقةٍ مطويّة،
+ * والرسائل في بطاقةٍ أخرى. وفعلٌ يُكرَّر في اليوم مرات لا يُدفن خلف نقرتين
+ * وبحثٍ عن قسم — ولا يُفرَّق على زرّين وهو في ذهن صاحبه فعلٌ واحد: «حدّثني».
+ *
+ * وعليه علامةٌ حين ينتظر شيء: رسائل في الصندوق تصير عمليات، أو عدد الخادم
+ * يخالف عدد الجهاز. ولا تُحتسب فيها رموزُ التحقّق ولا ما لم يُفهم — علامةٌ
+ * لا تزول بالضغط أسوأ من لا علامة.
  */
 function bindDrainButton() {
   const el = document.getElementById('drain');
   if (!el) return;
-  const sync = () => {
-    el.hidden = !state.sync.secret;             // بلا رمزٍ لا صندوق
-    const n = state.inbox.waiting || 0;
+  const paint = () => {
+    el.hidden = !state.sync.secret;             // بلا رمزٍ لا صندوق ولا مزامنة
+    const waiting = state.inbox.waiting || 0;
+    const drifted = state.sync.remoteCount != null && state.sync.remoteCount !== state.transactions.length;
+    const n = waiting || (drifted ? 1 : 0);
     el.classList.toggle('has-badge', n > 0);
-    el.dataset.badge = n > 9 ? '٩+' : String(n);
+    el.dataset.badge = waiting > 9 ? '٩+' : waiting > 0 ? String(waiting) : '!';
+    el.classList.toggle('sync-err', !!state.sync.status);
   };
-  bindDrainButton.sync = sync;
-  sync();
+  bindDrainButton.sync = paint;
+  paint();
   el.addEventListener('click', async () => {
     if (el.classList.contains('busy')) return;
     el.classList.add('busy');
-    await drainInbox({ silent: false });
+    // الترتيب مقصود: نسحب أوّلًا لئلّا ندهس ما رفعه جهازٌ آخر، ثم نلتقط
+    // الرسائل، ثم يُرفع ما استجدّ — و`syncPull` يرفع بنفسه متى لزم.
+    await refresh({ silent: false });
     el.classList.remove('busy');
-    sync();
+    paint();
   });
 }
 
@@ -531,8 +544,27 @@ function render() {
   const head = inAnalysis ? ROUTES.analysis : ROUTES[state.route];
   const tabs = inAnalysis ? V.segmented(ANALYSIS_TABS, section) : '';
   app.innerHTML = `<h1 class="page-title">${head.icon} ${head.ar}</h1>${tabs}${html}`;
+  restoreFolds(app);
   app.scrollTop = 0;
   updateBanner();
+}
+
+/**
+ * يُعيد فتح ما كان مفتوحًا من البطاقات المطويّة.
+ * الرسم يعيد بناء الشجرة، فتُغلق البطاقات كلها ويفقد المستخدم موضعه: يضغط
+ * زرًّا داخل بطاقةٍ فتنطوي أمامه ومعها نتيجةُ ما ضغط.
+ */
+const openFolds = new Set();
+function restoreFolds(root) {
+  root.querySelectorAll('details.fold').forEach((d) => {
+    const key = d.dataset.fold;
+    if (!key) return;
+    if (d.open) openFolds.add(key);            // ما فُتح بالبناء يُسجَّل
+    else if (openFolds.has(key)) d.open = true;
+    d.addEventListener('toggle', () => {
+      if (d.open) openFolds.add(key); else openFolds.delete(key);
+    });
+  });
 }
 
 function updateBanner() {
@@ -592,6 +624,33 @@ function bindEvents() {
     if (action === 'widget-copy-script') {
       await navigator.clipboard.writeText(V.scriptableSource(Sync.widgetUrl(state.settings?.widget?.token || '')));
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
+      return;
+    }
+    if (action === 'paste-open') { state.paste = state.paste || { text: '', result: null }; render(); return; }
+    if (action === 'paste-clear') { state.paste = { text: '', result: null }; render(); return; }
+    if (action === 'paste-parse') {
+      const text = document.getElementById('paste-text')?.value || '';
+      const { added, failed } = Inbox.parsePasted(text, { today: todayISO() });
+      // المكرر يُكشف بالبصمة قبل العرض، فلا يُعتمد ما هو موجود أصلًا
+      const { fresh, dups } = dedupe(added, await db.existingHashes());
+      state.paste = { text, result: { added, failed, fresh, dups } };
+      render();
+      return;
+    }
+    if (action === 'paste-commit') {
+      const fresh = state.paste?.result?.fresh || [];
+      if (!fresh.length) return;
+      await db.putMany(fresh);
+      await forgetDeleted(fresh.map((t) => t.hash));
+      state.inbox.log = Inbox.recordDrain(state.inbox.log, todayISO(), fresh.length);
+      await db.set('inboxLog', state.inbox.log);
+      state.paste = { text: '', result: null };
+      await reload();
+      const merged = await reconcilePending();
+      if (merged) toast(`طُوبقت ${merged} عملية بنظيرتها في الكشف`, 'ok');
+      toast(`أُضيفت ${fresh.length} عملية`, 'ok');
+      schedulePush();
+      render();
       return;
     }
     if (action === 'copy-failed') {

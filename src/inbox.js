@@ -186,6 +186,33 @@ export function smsToTransaction(parsed, msg, accountLabel = 'من الرسائ�
   return t;
 }
 
+// ── اللصق اليدوي ──────────────────────────────────────────────────────────
+/**
+ * رسائل تُلصق بنصّها بدل أن تمرّ بالصندوق.
+ *
+ * تفوت رسائلُ قليلة دائمًا: قبل ضبط الأتمتة، أو حين تخطئ، أو من مصرفٍ لم
+ * تُنشأ له أتمتة. ولصقُها أقوى من إرسالها بريدًا: لا تغادر المتصفح — فلا
+ * تشفير ولا خادم ولا مهلة — وتعمل بلا إنترنت، ويُعرض ما فُهم قبل اعتماده.
+ *
+ * والفصل بسطرٍ فارغ: هو ما يفعله من ينسخ عدّة رسائل، وأسطرُ الرسالة الواحدة
+ * متلاصقة فلا تلتبس بالفاصل.
+ *
+ * والمعرّف يُشتقّ من مضمون الرسالة لا من لحظة اللصق، فلصقُها مرتين لا
+ * يُضاعفها — وهذا ما يُفترق فيه اللصق عن الصندوق: الصندوق يعطي كل إيداعٍ
+ * معرّفًا جديدًا، واللاصق قد يعيد اللصق ظنًّا أنه لم ينجح.
+ */
+export function parsePasted(text, { today, accountLabel = 'رسائل ملصقة' } = {}) {
+  const chunks = String(text || '').split(/\n\s*\n+/).map((s) => s.trim()).filter(Boolean);
+  const added = [], failed = [];
+  for (const chunk of chunks) {
+    const parsed = parseBankSMS(chunk, { today });
+    if (!parsed.ok) { failed.push({ text: chunk, reason: parsed.reason, misconfig: parsed.misconfig }); continue; }
+    const id = `paste:${parsed.date}:${parsed.amount}:${(parsed.merchant || parsed.kind).slice(0, 16)}`;
+    added.push(smsToTransaction(parsed, { id, text: chunk }, accountLabel));
+  }
+  return { added, failed, total: chunks.length };
+}
+
 // ── الصندوق ───────────────────────────────────────────────────────────────
 
 async function call(method, box, body, extra = '') {

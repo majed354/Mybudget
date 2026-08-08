@@ -18,7 +18,7 @@ export const FILTER_IDS = new Set(['q', 'f-cat', 'f-acc', 'f-uncat', 'f-exc']);
 export const SETTINGS_RE = /^(p|a|m|b)-/;
 
 /** حقول لها معالجٌ خاصّ بها، فلا تُنسب إلى نموذج. */
-export const STANDALONE_IDS = new Set(['file-input', 'acc-name', 'pdf-pass', 'gate-code']);
+export const STANDALONE_IDS = new Set(['file-input', 'acc-name', 'pdf-pass', 'gate-code', 'paste-text']);
 
 export function formOf(id) {
   if (!id) return null;

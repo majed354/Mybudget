@@ -510,3 +510,21 @@ test('عبارة النوع تُقطع عن اسم التاجر فيُطابق �
   assert.equal(guessCategoryFromMerchant('BAJH TRAD'), 'groceries');
   assert.equal(guessCategoryFromMerchant('durah alb'), 'groceries');
 });
+
+test('تاريخ اليوم بتوقيت المستخدم لا بتوقيت غرينتش', async () => {
+  const { todayISO } = await import('../src/util.js');
+  // الرياض تسبق غرينتش بثلاث ساعات: ليلةَ التاسع الساعةَ الواحدة والنصف،
+  // `toISOString` يعود بالثامن — فتُعرض «اليوم ٨ من ٣١» ليلةَ التاسع
+  const night = new Date('2026-08-09T01:30:00+03:00');
+  assert.equal(night.toISOString().slice(0, 10), '2026-08-08', 'هذا ما كان يقع');
+  assert.equal(todayISO(night), '2026-08-09', 'وهذا الصواب');
+
+  // وأسوأه ليلةَ أول الشهر: شهرٌ كامل يُعرض على أنه الشهر الجاري
+  const first = new Date('2026-09-01T02:00:00+03:00');
+  assert.equal(first.toISOString().slice(0, 7), '2026-08');
+  assert.equal(todayISO(first).slice(0, 7), '2026-09');
+
+  // وفي منتصف النهار لا فرق بينهما
+  const noon = new Date('2026-08-09T12:00:00+03:00');
+  assert.equal(todayISO(noon), noon.toISOString().slice(0, 10));
+});

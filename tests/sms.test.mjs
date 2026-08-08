@@ -316,3 +316,18 @@ test('تجّار صاحب النسخة بأسمائهم المقتطعة كما 
   assert.equal(guessCategoryFromMerchant('Doc Deliv'), 'dining');
   assert.equal(guessCategoryFromMerchant('AMAN CARS'), 'transport');
 });
+
+test('خطأ إعداد الاختصار يُسمّى باسمه لا يُقال «لم يُعثر على مبلغ»', () => {
+  // ما وقع فعلًا: كُتب وصفُ الحقل مكان قيمته، فصارت الأتمتة ترسل العبارة
+  // نفسها في كل مرة، ولا تصل رسالةٌ من المصرف قطّ. والتشخيص هنا أنفع من
+  // التحليل: «لم يُعثر على مبلغ» يوهم أن رسالةً وصلت وعجز عن قراءتها.
+  for (const t of ['متغيّر مُدخل الاختصار — لا تكتبه بيدك', 'Shortcut Input', 'اسم المرسِل مكتوبًا بيدك']) {
+    const p = parseBankSMS(t, { sender: 'BankAlbilad — مكتوبًا بيدك' });
+    assert.equal(p.ok, false);
+    assert.equal(p.misconfig, true, t);
+    assert.match(p.reason, /الأتمتة ترسل نصّ الشرح/);
+  }
+  // ولا يُتّهم إشعارٌ صحيح بذلك
+  assert.notEqual(parseBankSMS(SMS.rajhiPos).misconfig, true);
+  assert.notEqual(parseBankSMS(SMS.albiladPos).misconfig, true);
+});
