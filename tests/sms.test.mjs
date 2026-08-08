@@ -106,16 +106,12 @@ test('البلاد — مشتريات إنترنت', () => {
   assert.equal(p.date, '2026-08-05');
 });
 
-test('البلاد — أمر مستديم إلى «حسابي»: تحويل داخلي لا صرف', () => {
+test('البلاد — أمر مستديم: يُقرأ المستفيد والمبلغ والتاريخ المقلوب', () => {
   const p = parseBankSMS(SMS.albiladStanding);
   assert.equal(p.kind, 'standing_order');
   assert.equal(p.amount, 2111.5, '2105.75 + 5.75 رسوم');
   assert.equal(p.self, true, '«حسابي أمازون» ⇒ المستفيد أنت');
   assert.equal(p.date, '2026-07-28', 'التاريخ هنا شهر/يوم/سنة فيُقلب');
-
-  const t = smsToTransaction(p, { id: 'm', text: SMS.albiladStanding });
-  assert.equal(t.excluded, true);
-  assert.equal(t.excludeReason, 'internal');
 });
 
 test('البلاد — نقاط بيع بصيغة مضغوطة و«من» ملتصقة بالاسم', () => {
@@ -182,4 +178,17 @@ test('اتجاه المبلغ صحيح: الشراء مدين والراتب د�
   const pay = parseBankSMS('إيداع راتب\nمبلغ: 20853.90 SAR\nفي: 27/08/2026');
   assert.equal(pay.kind, 'salary');
   assert.ok(smsToTransaction(pay, { id: '2', text: 'y' }).amount > 0);
+});
+
+test('الأمر المستديم إلى حسابك يبقى محسوبًا — مالٌ مرصود لا فائض', () => {
+  const p = parseBankSMS(SMS.albiladStanding);
+  const t = smsToTransaction(p, { id: 'm', text: SMS.albiladStanding });
+  assert.equal(p.self, true);
+  assert.equal(t.excluded, false, 'ما يخرج كل شهر في موعده التزامٌ ولو ذهب إلى حسابك');
+});
+
+test('الحوالة العابرة إلى حسابك تُستبعد', () => {
+  const sms = `حوالة محلية صادرة مقبولة\nالى:حسابي في الراجحي\nمبلغ:5000 SAR\nفي:2026/08/06 18:23`;
+  const t = smsToTransaction(parseBankSMS(sms), { id: 'm', text: sms });
+  assert.equal(t.excluded, true);
 });

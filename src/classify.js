@@ -326,9 +326,15 @@ export function applyClassification(transactions, rules = [], own = {}) {
   return transactions;
 }
 
-/** قاعدة مقترحة من وسمٍ يدوي، لتعميمه على كل عمليات التاجر نفسه. */
+// الالتزامات الدورية تتكرّر بمبلغٍ ثابت، وقد يكون للنوع الواحد التزامان
+// مختلفان (أمر مستديم بـ٢١٠٥ وآخر بـ٣٣٠)، فتعميمُ الوسم بالنوع يخلط بينهما.
+const FIXED_AMOUNT_TYPES = new Set(['standing_order', 'loan', 'bill', 'fee']);
+
+/** قاعدة مقترحة من وسمٍ يدوي، لتعميمه على أشباه العملية لا على ما يخالفها. */
 export function suggestRule(t, category) {
   if (t.merchantKey) return { field: 'merchant', op: 'key', value: t.merchantKey, category, label: t.merchant };
+  const amountRule = { field: 'amount', op: 'equals', value: Math.abs(t.amount), category, label: `مبلغ ${Math.abs(t.amount)}` };
+  if (FIXED_AMOUNT_TYPES.has(t.type)) return amountRule;
   if (t.type && t.type !== 'pos') return { field: 'type', op: 'equals', value: t.type, category, label: TYPES[t.type]?.ar };
-  return { field: 'amount', op: 'equals', value: Math.abs(t.amount), category, label: `مبلغ ${Math.abs(t.amount)}` };
+  return amountRule;
 }

@@ -29,7 +29,9 @@ export default async (req) => {
   const box = url.searchParams.get('box') || '';
   if (!BOX_RE.test(box)) return json({ error: 'رمز صندوق غير صالح' }, 400);
 
-  const store = getStore('mybudget-inbox');
+  // الاتساق القوي ضروري هنا: الجوال يودع ثم يسحب التطبيق بعد ثوانٍ، ومع
+  // الاتساق المؤجَّل الافتراضي قد تعود القراءة فارغة فتضيع العملية.
+  const store = getStore({ name: 'mybudget-inbox', consistency: 'strong' });
 
   try {
     // ── إيداع رسالة (من الهاتف) ──────────────────────────────────────────

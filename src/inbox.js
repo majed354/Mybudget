@@ -120,13 +120,21 @@ function firstMatch(text, patterns) {
 }
 
 const CREDIT_KINDS = new Set(['cash_in', 'salary', 'transfer_in', 'refund']);
-// أنواع تُعامل تحويلًا داخليًا لا صرفًا: تسديد بطاقةٍ من حسابك، أو حوالةٌ إلى نفسك
+// تسديد بطاقتك من حسابك نقلُ مالٍ لا إنفاقٌ جديد — الإنفاق سُجّل يوم الشراء
 const INTERNAL_KINDS = new Set(['card_payment']);
+/**
+ * الحوالة إلى حسابك تُستبعد… إلا أن تكون أمرًا مستديمًا.
+ * فالمبلغ الذي يخرج كل شهر في موعده إلى حسابٍ مخصَّص (إيجار، مدرسة، ادخار
+ * ملزِم) مالٌ مرصود لا فائضٌ متاح؛ ولو استُبعد لأوهم المحرّك أن لديك سعةً
+ * ليست لك. فيبقى محسوبًا حتى تصنّفه بنفسك.
+ */
+const EARMARKED_KINDS = new Set(['standing_order']);
 
 /** يحوّل رسالة محلَّلة إلى عملية معلَّقة تُعرض في اللوحة. */
 export function smsToTransaction(parsed, msg, accountLabel = 'من الرسائل') {
   const signed = CREDIT_KINDS.has(parsed.kind) ? parsed.amount : -parsed.amount;
-  const isInternal = parsed.self || INTERNAL_KINDS.has(parsed.kind);
+  const isInternal = INTERNAL_KINDS.has(parsed.kind)
+    || (parsed.self && !EARMARKED_KINDS.has(parsed.kind));
   const t = {
     id: uid(),
     seq: 0,

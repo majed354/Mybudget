@@ -19,7 +19,9 @@ export default async (req) => {
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!ID_RE.test(id)) return json({ error: 'معرّف غير صالح' }, 400);
 
-  const store = getStore('mybudget-sync');
+  // الاتساق القوي ضروري هنا: الجوال يودع ثم يسحب التطبيق بعد ثوانٍ، ومع
+  // الاتساق المؤجَّل الافتراضي قد تعود القراءة فارغة فتضيع العملية.
+  const store = getStore({ name: 'mybudget-sync', consistency: 'strong' });
 
   try {
     if (req.method === 'GET') {
