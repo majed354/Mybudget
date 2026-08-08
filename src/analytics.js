@@ -418,6 +418,12 @@ export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
   const pace = expectedByNow > 0 ? spent / expectedByNow : 0;
   const projected = day > 0 ? spent * (daysInMonth / day) : 0;
 
+  // صرفُ اليوم وآخر عملية: هذا ما يُسأل عنه في اللحظة — «هل سُجّل شراؤي؟»
+  // و«كم صرفتُ اليوم؟» — ولا يجيبه متوسطُ شهرٍ ولا وسيطُ سنة.
+  const spendRows = (a.list || []).filter((t) => !t.excluded && t.amount < 0);
+  const todayRows = spendRows.filter((t) => t.date === today);
+  const lastRow = spendRows.slice().sort((x, y) => (x.date === y.date ? (x.seq || 0) - (y.seq || 0) : x.date.localeCompare(y.date))).pop();
+
   const byCat = m?.byCategory || {};
   const totalCat = Object.values(byCat).reduce((s, v) => s + v, 0);
   const top = Object.entries(byCat)
@@ -438,5 +444,15 @@ export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
     projected,
     overBy: projected > cap ? projected - cap : 0,
     top,
+    todaySpent: todayRows.reduce((s, t) => s - t.amount, 0),
+    todayCount: todayRows.length,
+    monthCount: (a.list || []).filter((t) => !t.excluded && t.amount < 0 && monthKey(t.date) === key).length,
+    last: lastRow ? {
+      // اسم التاجر إن عُرف، وإلا فالمجال — ولا يُلقى نصّ الكشف الخام في أداةٍ
+      // عرضُها بضعة أحرف، فيخرج سطرًا مبتورًا لا يُفهم
+      name: lastRow.merchant || CATEGORY_MAP[lastRow.category]?.ar || 'عملية',
+      amount: -lastRow.amount,
+      date: lastRow.date,
+    } : null,
   };
 }

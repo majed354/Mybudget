@@ -208,6 +208,26 @@ async function toggleNotifications() {
 
 // ── المزامنة ──────────────────────────────────────────────────────────────
 
+/**
+ * ينشر ملخّص أداة الشاشة بعد كل إعادة حساب — بتأخيرٍ يمنع النشر المتكرر.
+ * ولا يُنشر شيء ما لم يُفعّله المستخدم صراحةً: هذا الطريق الوحيد الذي يخرج
+ * منه رقمٌ بلا تشفير، فلا يُفتح بالسهو ولا بالافتراض.
+ */
+function publishWidget() {
+  const w = state.settings?.widget;
+  if (!w?.enabled || !w.token || !state.month) return;
+  clearTimeout(publishWidget._t);
+  publishWidget._t = setTimeout(async () => {
+    try {
+      await Sync.publishWidget(w.token, Sync.widgetSummary(state.month));
+      state.widgetAt = new Date().toISOString();
+    } catch (err) {
+      state.widgetError = err.message;
+    }
+    if (state.route === 'settings') render();
+  }, 1500);
+}
+
 /** يرفع نسخة مشفّرة بعد كل تغيير، بتأخير يمنع الرفع المتكرر. */
 function schedulePush() {
   if (!state.sync.secret) return;
@@ -336,6 +356,7 @@ async function reload() {
       limit: +state.settings?.budget?.monthlyLimit || null,
     })
     : null;
+  publishWidget();
   recompute();
 }
 
@@ -452,6 +473,7 @@ function render() {
     case 'settings': html = V.viewSettings(state, a); break;
     default: html = V.viewDashboard(a, state);
   }
+  state.widgetUrl = state.settings?.widget?.token ? Sync.widgetUrl(state.settings.widget.token) : '';
   const head = inAnalysis ? ROUTES.analysis : ROUTES[state.route];
   const tabs = inAnalysis ? V.segmented(ANALYSIS_TABS, section) : '';
   app.innerHTML = `<h1 class="page-title">${head.icon} ${head.ar}</h1>${tabs}${html}`;
@@ -489,6 +511,35 @@ function bindEvents() {
     if (action === 'go-categories') { location.hash = 'categories'; return; }
     if (action === 'go-tag') { state.filter = { ...state.filter, onlyUncat: true, cat: '' }; location.hash = 'transactions'; return; }
     if (action === 'go-excluded') { state.filter = { ...state.filter, onlyExcluded: true }; location.hash = 'transactions'; return; }
+    if (action === 'widget-on') {
+      if (!confirm('تفعيل أداة الشاشة؟\n\nيُرفع ملخّصٌ مجمَّع — ما صُرف والحدّ والمتبقي والتوفير وأكبر ثلاثة مجالات وآخر عملية — بلا تشفير، خلف رمزٍ عشوائي لا يُخمَّن.\n\nولا يُرفع شيء من قائمة عملياتك ولا أرصدتك ولا أرقام حساباتك. وتستطيع إبطاله في أي وقت.')) return;
+      const token = Sync.newWidgetToken();
+      state.settings = await saveSettings({ widget: { token, enabled: true } });
+      publishWidget();
+      toast('فُعّلت الأداة — انسخ الرابط إلى Scriptable', 'ok');
+      render();
+      return;
+    }
+    if (action === 'widget-off') {
+      const token = state.settings?.widget?.token;
+      if (!confirm('إبطال أداة الشاشة؟ يُمحى الملخّص من الخادم ويبطل رمزه.')) return;
+      try { if (token) await Sync.revokeWidget(token); } catch { /* الرمز يبطل عندنا على كل حال */ }
+      state.settings = await saveSettings({ widget: { token: '', enabled: false } });
+      state.widgetAt = null;
+      toast('أُبطلت الأداة ومُحي ملخّصها', 'warn');
+      render();
+      return;
+    }
+    if (action === 'widget-copy-url') {
+      await navigator.clipboard.writeText(Sync.widgetUrl(state.settings?.widget?.token || ''));
+      toast('نُسخ الرابط', 'ok');
+      return;
+    }
+    if (action === 'widget-copy-script') {
+      await navigator.clipboard.writeText(V.scriptableSource(Sync.widgetUrl(state.settings?.widget?.token || '')));
+      toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
+      return;
+    }
     if (action === 'go-settings') { location.hash = 'settings'; return; }
     if (action === 'go-analysis') { location.hash = 'categories'; return; }
     if (action.startsWith('open-category')) {

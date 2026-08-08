@@ -13,6 +13,7 @@ const PORT = Number(process.argv[2]) || 8778;
 
 const syncStore = new Map();   // id → {data, updatedAt}
 const inboxStore = new Map();  // box → [messages]
+const widgetStore = new Map(); // token → ملخّص الأداة
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -54,6 +55,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, { ok: true, updatedAt });
     }
     if (req.method === 'DELETE') { syncStore.delete(id); return json(res, { ok: true }); }
+    return json(res, { error: 'طريقة غير مدعومة' }, 405);
+  }
+
+  // ── محاكاة /api/widget ──────────────────────────────────────────────────
+  if (url.pathname === '/api/widget') {
+    const t = url.searchParams.get('t') || '';
+    if (!/^[a-f0-9]{32,64}$/.test(t)) return json(res, { error: 'رمز غير صالح' }, 400);
+    if (req.method === 'GET') {
+      const hit = widgetStore.get(t);
+      return json(res, hit ? { found: true, ...hit } : { found: false });
+    }
+    if (req.method === 'PUT') {
+      try { widgetStore.set(t, JSON.parse(await readBody(req))); } catch { return json(res, { error: 'جسم غير صالح' }, 400); }
+      return json(res, { ok: true });
+    }
+    if (req.method === 'DELETE') { widgetStore.delete(t); return json(res, { ok: true }); }
     return json(res, { error: 'طريقة غير مدعومة' }, 405);
   }
 

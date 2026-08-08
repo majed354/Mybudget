@@ -426,3 +426,44 @@ test('نقطة التحوّل: التحويل إلى حساباتك صرفٌ ق�
   markExclusions(off, { analysis: { excludeInternal: false, ownTransfersSpendUntil: '2026-08-01' } });
   assert.ok(off.every((t) => !t.excluded));
 });
+
+// ── صورة الشهر الجاري ─────────────────────────────────────────────────────
+
+test('صورة الشهر: ما صُرف، وما بقي من الحدّ، والوتيرة، والمتوقَّع', async () => {
+  const { monthSnapshot } = await import('../src/analytics.js');
+  const a = {
+    months: [{ key: '2026-08', spend: 6000, income: 20000, byCategory: { groceries: 3000, dining: 2000, transport: 1000 } }],
+    spend: { median: 12000 },
+  };
+  // اليوم العاشر من واحدٍ وثلاثين، والحدّ ١٢ ألفًا
+  const m = monthSnapshot(a, { today: '2026-08-10', limit: 12000 });
+  assert.equal(m.spent, 6000);
+  assert.equal(m.remaining, 6000);
+  assert.equal(+m.usedShare.toFixed(3), 0.5);
+  assert.equal(m.saved, 14000);
+  // المفترَض حتى اليوم = ١٢٠٠٠ × ١٠/٣١ ≈ ٣٨٧١، فالوتيرة ضِعفٌ ونصف تقريبًا
+  assert.ok(m.pace > 1.5, `الوتيرة ${m.pace} يجب أن تكشف التسرّع`);
+  assert.equal(Math.round(m.projected), 18600, 'مدُّ الوتيرة إلى آخر الشهر');
+  assert.equal(Math.round(m.overBy), 6600);
+  assert.deepEqual(m.top.map((c) => c.id), ['groceries', 'dining', 'transport']);
+  assert.equal(+m.top[0].share.toFixed(2), 0.5);
+});
+
+test('بلا حدٍّ مضبوط يُشتقّ من وسيط الصرف فيبقى العدّاد ذا معنى', async () => {
+  const { monthSnapshot } = await import('../src/analytics.js');
+  const a = { months: [{ key: '2026-08', spend: 1000, income: 0, byCategory: {} }], spend: { median: 9000 } };
+  const m = monthSnapshot(a, { today: '2026-08-15', limit: null });
+  assert.equal(m.limit, 9000);
+  assert.equal(m.limitIsDerived, true);
+  assert.equal(m.savedShare, null, 'لا دخل ⇒ لا نسبة ادخار تُعرض');
+});
+
+test('شهرٌ بلا عمليات لا يكسر الصورة', async () => {
+  const { monthSnapshot } = await import('../src/analytics.js');
+  const a = { months: [{ key: '2026-07', spend: 500, income: 0, byCategory: {} }], spend: { median: 4000 } };
+  const m = monthSnapshot(a, { today: '2026-08-03', limit: 4000 });
+  assert.equal(m.spent, 0);
+  assert.equal(m.remaining, 4000);
+  assert.equal(m.top.length, 0);
+  assert.equal(monthSnapshot(null, { today: '2026-08-03' }), null);
+});

@@ -225,3 +225,66 @@ function mergeRules(a = [], b = []) {
   }
   return [...seen.values()];
 }
+
+// ── ملخّص أداة الشاشة ─────────────────────────────────────────────────────
+/**
+ * الطريق الوحيد الذي يخرج منه رقمٌ بلا تشفير، وباختيارٍ صريح من صاحب النسخة.
+ *
+ * أداة شاشة الآيفون لا تستطيع فكّ التشفير: لا `crypto.subtle` في بيئتها،
+ * واشتقاق المفتاح ٢١٠ ألف دورة لا تحتمله أداةٌ لها ثوانٍ معدودة. فإمّا ملخّصٌ
+ * مقروء، وإمّا لا أداة.
+ *
+ * ورمزه مستقلٌّ عن مفتاح المزامنة عمدًا — عشوائيٌّ لا مشتقّ — فإبطالُه لا
+ * يمسّ مزامنتك، ولا يُستدلّ منه على مفتاحك.
+ */
+const WIDGET_ENDPOINT = '/api/widget';
+
+export function newWidgetToken() {
+  return hex(crypto.getRandomValues(new Uint8Array(24)));   // ٤٨ محرفًا
+}
+
+export function widgetUrl(token) {
+  return `${location.origin}${WIDGET_ENDPOINT}?t=${token}`;
+}
+
+export async function publishWidget(token, summary) {
+  const res = await fetch(widgetUrl(token), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(summary),
+  });
+  const out = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(out?.error || `فشل النشر (${res.status})`);
+  return out;
+}
+
+export async function revokeWidget(token) {
+  const res = await fetch(widgetUrl(token), { method: 'DELETE' });
+  if (!res.ok) throw new Error(`فشل الإلغاء (${res.status})`);
+  return true;
+}
+
+/** يبني الملخّص من صورة الشهر — مجمَّعٌ فقط، بلا قائمة عمليات ولا أرصدة. */
+export function widgetSummary(m, at = new Date().toISOString()) {
+  if (!m) return null;
+  const r2 = (x) => Math.round((x || 0) * 100) / 100;
+  return {
+    v: 1,
+    month: m.key,
+    day: m.day,
+    daysInMonth: m.daysInMonth,
+    spent: r2(m.spent),
+    limit: r2(m.limit),
+    remaining: r2(m.remaining),
+    saved: r2(m.saved),
+    income: r2(m.income),
+    pace: r2(m.pace),
+    projected: r2(m.projected),
+    todaySpent: r2(m.todaySpent),
+    todayCount: m.todayCount || 0,
+    monthCount: m.monthCount || 0,
+    top: (m.top || []).slice(0, 3).map((c) => ({ n: String(c.ar).slice(0, 40), a: r2(c.amount) })),
+    last: m.last ? { n: String(m.last.name).trim().slice(0, 28), a: r2(m.last.amount), d: m.last.date } : null,
+    at,
+  };
+}

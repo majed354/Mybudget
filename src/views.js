@@ -662,6 +662,7 @@ export function viewSettings(state, a) {
 
     ${foldable('ربط رسائل البنك بالجوال', inboxBody(state), { hint: state.inbox?.boxId ? 'مربوط' : 'غير مربوط' })}
 
+    ${foldable('أداة شاشة الآيفون', widgetBody(state), { hint: state.settings?.widget?.enabled ? 'مفعّلة' : 'متوقفة' })}
     ${foldable('التنبيهات', notifyBody(state), { hint: state.notify?.enabled ? 'مفعّلة' : 'متوقفة' })}
 
     ${foldable('رمز الدخول والمزامنة', syncBody(state), { open: true, hint: state.sync?.secret ? 'مفعّلة' : 'متوقفة' })}
@@ -788,6 +789,132 @@ function notifyBody(state) {
 export function segmented(tabs, active) {
   return `<nav class="segmented">${tabs.map((t) => `
     <a href="#${t.id}" class="${t.id === active ? 'on' : ''}" ${t.id === active ? 'aria-current="page"' : ''}>${escapeHTML(t.ar)}</a>`).join('')}</nav>`;
+}
+
+/**
+ * سكربت أداة الشاشة لتطبيق Scriptable.
+ * يُبنى بالرابط مضمَّنًا فيه، فلا يبقى على المستخدم إلا اللصق والتسمية.
+ * ولا يستعمل شيئًا من واجهات المتصفح: بيئة Scriptable ليست متصفحًا.
+ */
+export function scriptableSource(url) {
+  return `// ميزانيتي — أداة الشاشة
+// الصقه في Scriptable، ثم أضف أداةً على الشاشة واخترها.
+const URL_ = ${JSON.stringify(url)};
+
+const money = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n || 0));
+
+let d = null;
+try {
+  const r = new Request(URL_);
+  r.timeoutInterval = 10;
+  const j = await r.loadJSON();
+  if (j && j.found !== false) d = j;
+} catch (e) { /* تبقى الأداة على آخر ما رُسم */ }
+
+const w = new ListWidget();
+w.setPadding(14, 14, 14, 14);
+w.url = ${JSON.stringify(location.origin)};
+
+if (!d) {
+  w.addText('ميزانيتي').font = Font.boldSystemFont(13);
+  const t = w.addText('لا يوجد ملخّص بعد');
+  t.font = Font.systemFont(12);
+  t.textColor = Color.gray();
+} else {
+  const over = d.remaining < 0;
+  const fast = d.pace > 1.05;
+  const accent = over ? new Color('#dc2626') : fast ? new Color('#d97706') : new Color('#059669');
+
+  const head = w.addStack();
+  const ttl = head.addText('صُرف هذا الشهر');
+  ttl.font = Font.systemFont(11);
+  ttl.textColor = Color.gray();
+  head.addSpacer();
+  const today = head.addText('اليوم ' + money(d.todaySpent));
+  today.font = Font.systemFont(11);
+  today.textColor = Color.gray();
+
+  const big = w.addText(money(d.spent) + ' ر.س');
+  big.font = Font.boldSystemFont(26);
+  w.addSpacer(2);
+
+  const line = w.addText((over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit));
+  line.font = Font.semiboldSystemFont(12);
+  line.textColor = accent;
+
+  // شريط الاستهلاك: خطٌّ ممتلئ بقدر ما صُرف من الحدّ
+  const share = d.limit > 0 ? Math.max(0, Math.min(1, d.spent / d.limit)) : 0;
+  const bar = w.addStack();
+  bar.spacing = 0;
+  bar.addSpacer(0);
+  const full = bar.addStack();
+  full.backgroundColor = accent;
+  full.cornerRadius = 3;
+  full.size = new Size(Math.max(2, Math.round(150 * share)), 6);
+  full.addSpacer(0);
+  const rest = bar.addStack();
+  rest.backgroundColor = new Color('#9ca3af', 0.3);
+  rest.cornerRadius = 3;
+  rest.size = new Size(Math.max(0, 150 - Math.round(150 * share)), 6);
+  rest.addSpacer(0);
+  w.addSpacer(4);
+
+  const pace = w.addText('اليوم ' + d.day + '/' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected));
+  pace.font = Font.systemFont(10);
+  pace.textColor = Color.gray();
+
+  w.addSpacer(6);
+  const saved = w.addText('وُفِّر ' + money(d.saved) + ' ر.س');
+  saved.font = Font.semiboldSystemFont(12);
+  saved.textColor = d.saved >= 0 ? new Color('#059669') : new Color('#dc2626');
+
+  const top = (d.top || [])[0];
+  if (top) {
+    const tp = w.addText('أكبر مجال: ' + top.n + ' ' + money(top.a));
+    tp.font = Font.systemFont(10);
+    tp.textColor = Color.gray();
+  }
+  if (d.last) {
+    const ls = w.addText('آخر عملية: ' + d.last.n + ' ' + money(d.last.a));
+    ls.font = Font.systemFont(10);
+    ls.textColor = Color.gray();
+  }
+}
+
+if (config.runsInWidget) Script.setWidget(w);
+else w.presentMedium();
+Script.complete();
+`;
+}
+
+function widgetBody(state) {
+  const w = state.settings?.widget || {};
+  if (!w.enabled || !w.token) {
+    return `<p class="lead">أداةٌ على شاشة الآيفون تعرض: ما صُرف هذا الشهر، وما بقي من الحدّ، وصرفَ اليوم،
+      والتوفير، وأكبر مجال، وآخر عملية.</p>
+    <p class="hint">⚠️ تطبيق الويب لا يستطيع صنع أداةٍ على iOS — ذلك حكرٌ على التطبيقات الأصلية. فالطريق تطبيق
+      <strong>Scriptable</strong> المجاني، وهو لا يفكّ تشفيرك (لا <code>crypto.subtle</code> في بيئته).
+      ولذلك يُرفع <strong>ملخّصٌ مجمَّع بلا تشفير</strong> خلف رمزٍ عشوائي لا يُخمَّن — ولا يُرفع شيء من
+      قائمة عملياتك ولا أرصدتك ولا أرقام حساباتك، والخادم نفسه يرفض ما عدا الحقول المجمَّعة.</p>
+    <button class="btn primary" data-action="widget-on">فعّل أداة الشاشة</button>`;
+  }
+  return `
+    <p class="lead">الأداة مفعّلة. الملخّص يُحدَّث كلما تغيّرت أرقامك.</p>
+    <div class="secret-box"><code class="secret">${escapeHTML(state.widgetUrl || '')}</code>
+      <button class="btn tiny" data-action="widget-copy-url">نسخ الرابط</button></div>
+    <ol class="steps">
+      <li>ثبّت <strong>Scriptable</strong> من App Store.</li>
+      <li>اضغط «انسخ السكربت» أدناه، وافتح Scriptable ← <strong>+</strong> ← الصق ← سمِّه «ميزانيتي».</li>
+      <li>على الشاشة الرئيسية: مطوّلًا ← <strong>+</strong> ← Scriptable ← اختر الحجم المتوسط،
+        ثم اضغط الأداة واختر Script = «ميزانيتي».</li>
+    </ol>
+    <div class="row gap wrap">
+      <button class="btn primary" data-action="widget-copy-script">انسخ السكربت</button>
+      <button class="btn danger" data-action="widget-off">أبطِل الأداة وامحُ ملخّصها</button>
+    </div>
+    <p class="hint">${state.widgetAt ? `آخر نشر: ${escapeHTML(new Date(state.widgetAt).toLocaleString('ar-SA'))}` : 'لم يُنشر بعد — سيُنشر عند أول تغيّر'}
+      ${state.widgetError ? `<span class="danger-text"> — ${escapeHTML(state.widgetError)}</span>` : ''}</p>
+    <p class="hint">🔒 الرمز مستقلٌّ عن مفتاح المزامنة، فإبطاله لا يمسّها ولا يُستدلّ منه عليها.</p>`;
 }
 
 function syncBody(state) {
