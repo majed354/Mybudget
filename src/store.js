@@ -115,6 +115,9 @@ export const DEFAULT_SETTINGS = {
     extraordinaryFactor: 4,     // ما تجاوز 4× وسيط الشهر يُعرض للمراجعة
     ignoreLastPartialMonth: true,
   },
+  // حدّ الإنفاق الشهري: فارغٌ = يُشتقّ من وسيط صرفك، فيبدأ العدّاد ذا معنى
+  // قبل أن يضبطه المستخدم، ثم يستبدله برقمه متى شاء.
+  budget: { monthlyLimit: '' },
   ui: { theme: 'auto' },
 };
 

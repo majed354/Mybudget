@@ -142,6 +142,78 @@ function importPreview(p) {
   `, { cls: 'preview' });
 }
 
+/**
+ * صدر اللوحة: الشهر الجاري وحده — كم صُرف، وكم بقي من الحدّ، وكم وُفِّر،
+ * وأين ذهب أكثره. هذه أسئلة اليوم، وما دونها تاريخٌ يُراجَع عند الحاجة.
+ *
+ * والشريط يحمل علامتين لا واحدة: ما صُرف، وما كان يُفترض صرفُه حتى اليوم لو
+ * وُزّع الحدّ على أيام الشهر. فمن رأى الشريط دون العلامة عرف أنه في سعة،
+ * ومن رآه فوقها عرف أنه أسرع من حدّه ولو بقي في الحدّ رصيد.
+ */
+/** الوتيرة كلامًا: النسبة تُقرأ قرب الواحد، والمضاعفة أوضح متى بَعُدت عنه. */
+function paceAr(pace) {
+  if (pace >= 2) return `وتيرتك ${num(pace, 1)}× حدّك`;
+  return `أسرع من حدّك بـ${pct(pace - 1, 0)}`;
+}
+
+function monthCard(m) {
+  if (!m) return '';
+  const over = m.remaining < 0;
+  const fast = m.pace > 1.05;
+  const tone = over ? 'danger' : fast ? 'warn' : 'ok';
+  const fill = Math.min(100, Math.max(0, m.usedShare * 100));
+  const markAt = Math.min(100, (m.day / m.daysInMonth) * 100);
+
+  return `<section class="card month-card ${tone}">
+    <div class="card-body">
+      <div class="month-head">
+        <div>
+          <div class="kpi-label">صُرف هذا الشهر · ${escapeHTML(monthLabel(m.key))}</div>
+          <div class="month-spent">${money(m.spent, { round: true })}</div>
+        </div>
+        <div class="month-remain">
+          <div class="kpi-label">${over ? 'تجاوزتَ الحدّ بـ' : 'بقي من الحدّ'}</div>
+          <div class="month-remain-value ${over ? 'neg' : 'pos'}">${money(Math.abs(m.remaining), { round: true })}</div>
+          <div class="kpi-sub">من ${money(m.limit, { round: true })}${m.limitIsDerived ? ' (مُشتقّ)' : ''}</div>
+        </div>
+      </div>
+
+      <div class="meter" role="img" aria-label="استُهلك ${pct(m.usedShare)} من حدّ الشهر في اليوم ${m.day} من ${m.daysInMonth}">
+        <div class="meter-fill" style="width:${fill}%"></div>
+        <div class="meter-mark" style="inset-inline-start:${markAt}%" title="ما كان يُفترض صرفُه حتى اليوم"></div>
+      </div>
+      <p class="hint">اليوم ${num(m.day)} من ${num(m.daysInMonth)} · استُهلك ${pct(m.usedShare)} من الحدّ
+        · ${fast ? `<strong class="warn-text">${paceAr(m.pace)}</strong>` : '<strong class="pos">ضمن الوتيرة</strong>'}
+        · بهذه الوتيرة تنهي الشهر عند <strong>${money(m.projected, { round: true })}</strong>${m.overBy > 0 ? ` — بتجاوزٍ قدره ${money(m.overBy, { round: true })}` : ''}</p>
+
+      <div class="month-grid">
+        <div class="mini">
+          <div class="kpi-label">وُفِّر هذا الشهر</div>
+          <div class="mini-value ${m.saved >= 0 ? 'pos' : 'neg'}">${money(m.saved, { round: true })}</div>
+          <div class="kpi-sub">${m.savedShare == null ? 'لا دخل مسجَّل بعد' : `${pct(m.savedShare)} من دخل الشهر`}</div>
+        </div>
+        <div class="mini">
+          <div class="kpi-label">دخل الشهر</div>
+          <div class="mini-value">${money(m.income, { round: true })}</div>
+        </div>
+      </div>
+
+      ${m.top.length ? `<h3>أين ذهب أكثره</h3>
+        <ul class="top-cats">${m.top.map((c) => `<li>
+          <span class="tc-name">${escapeHTML(c.ar)}</span>
+          <span class="tc-bar"><i style="width:${Math.round(c.share * 100)}%"></i></span>
+          <span class="tc-amount ltr">${money(c.amount, { round: true })}</span>
+          <span class="tc-share">${pct(c.share, 0)}</span>
+        </li>`).join('')}</ul>` : ''}
+
+      <div class="row gap wrap mt">
+        <button class="btn tiny" data-action="go-settings">اضبط الحدّ الشهري</button>
+        <button class="btn tiny" data-action="go-analysis">كل المجالات</button>
+      </div>
+    </div>
+  </section>`;
+}
+
 // ── ٢) لوحة القيادة ───────────────────────────────────────────────────────
 export function viewDashboard(a, state) {
   if (!a) return empty('لا توجد بيانات بعد.', '<button class="btn primary" data-action="go-import">ابدأ بالاستيراد</button>');
@@ -168,6 +240,8 @@ export function viewDashboard(a, state) {
 
   return `
   <div class="grid">
+    ${monthCard(state.month)}
+
     <div class="kpi-row">
       ${kpi('الدخل الشهري المتكرر', money(a.income.median, { round: true }), { sub: a.income.salary ? `راتب ${money(a.income.salary.amount, { round: true })} يوم ${num(a.income.salary.day)}` : 'مُستنتج من الوارد المتكرر', tone: 'ok' })}
       ${kpi('متوسط الصرف الشهري', money(a.spend.median, { round: true }), { sub: `الربيع الأعلى ${money(a.spend.p75, { round: true })}`, tone: '' })}
@@ -536,6 +610,12 @@ export function viewSettings(state, a) {
   const s = state.settings;
   const rules = state.rules || [];
   return `<div class="grid">
+    ${foldable('حدّ الإنفاق الشهري', `
+      <p class="hint">هو ما تقيس به شهرك: كم صُرف، وكم بقي، وهل وتيرتك أسرع من حدّك.
+        اتركه فارغًا ليُشتقّ من وسيط صرفك${a?.spend?.median ? ` — وهو الآن ${money(a.spend.median, { round: true })}` : ''}.</p>
+      ${numField('b-limit', 'الحدّ الشهري (ر.س)', s.budget?.monthlyLimit ?? '', 'مُشتقّ من كشوفك')}
+    `, { open: true })}
+
     ${foldable('حُرّاس القرار', `
       <p class="hint">هذه السقوف هي ما يفصل «مريح» عن «مع ضغط» عن «غير ملائم». عدّلها لتوافق سياستك.</p>
       <div class="row wrap gap">

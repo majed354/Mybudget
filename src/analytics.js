@@ -391,3 +391,52 @@ export function latestBalances(transactions) {
   }
   return { per, total: sum(Object.values(per).map((x) => x.balance)) };
 }
+
+// ── صورة الشهر الجاري ─────────────────────────────────────────────────────
+/**
+ * ما صُرف من الشهر، وكم بقي من الحدّ، وكم وُفِّر، وأين ذهب أكثره.
+ *
+ * الشهر الجاري ناقصٌ بطبيعته، فمقارنة صرفِ نصفِه بحدٍّ كاملٍ تُطمئن كذبًا.
+ * ولذلك تُحسب «الوتيرة»: نسبةُ ما صُرف إلى ما كان يُفترض صرفُه حتى اليوم لو
+ * وُزّع الحدّ على أيام الشهر بالتساوي. فوتيرةٌ فوق الواحد تعني أنك أسرع من
+ * حدّك ولو بقي فيه رصيد. و«المتوقَّع» يمدّ الوتيرة إلى آخر الشهر.
+ *
+ * والحدّ إن لم يُحدَّد يُشتقّ من وسيط صرفك، فيبدأ العدّاد ذا معنى من أول يوم.
+ */
+export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
+  if (!a || !a.months?.length) return null;
+  const day = Number(today.slice(8, 10));
+  const key = today.slice(0, 7);
+  const daysInMonth = new Date(Date.UTC(+key.slice(0, 4), +key.slice(5, 7), 0)).getUTCDate();
+
+  const m = a.months.find((x) => x.key === key);
+  const spent = m?.spend || 0;
+  const income = m?.income || 0;
+
+  const cap = limit > 0 ? limit : (a.spend?.median || 0);
+  const expectedByNow = cap * (day / daysInMonth);
+  const pace = expectedByNow > 0 ? spent / expectedByNow : 0;
+  const projected = day > 0 ? spent * (daysInMonth / day) : 0;
+
+  const byCat = m?.byCategory || {};
+  const totalCat = Object.values(byCat).reduce((s, v) => s + v, 0);
+  const top = Object.entries(byCat)
+    .map(([id, amount]) => ({ id, ar: CATEGORY_MAP[id]?.ar || id, amount, share: totalCat ? amount / totalCat : 0 }))
+    .sort((x, y) => y.amount - x.amount)
+    .slice(0, topN);
+
+  return {
+    key, day, daysInMonth,
+    spent, income,
+    saved: income - spent,
+    savedShare: income > 0 ? (income - spent) / income : null,
+    limit: cap,
+    limitIsDerived: !(limit > 0),
+    remaining: cap - spent,
+    usedShare: cap > 0 ? spent / cap : 0,
+    pace,
+    projected,
+    overBy: projected > cap ? projected - cap : 0,
+    top,
+  };
+}

@@ -314,6 +314,42 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   }
 }
 
+/* ── بطاقة الشهر الجاري ────────────────────────────────────── */
+.month-card { border-inline-start: 4px solid var(--ok); }
+.month-card.warn { border-inline-start-color: var(--warn); }
+.month-card.danger { border-inline-start-color: var(--danger); }
+.month-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.month-spent {
+  font-size: clamp(1.6rem, 8vw, 2.3rem); font-weight: 800; line-height: 1.15;
+  direction: ltr; text-align: start; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.month-remain { text-align: end; }
+.month-remain-value {
+  font-size: clamp(1.05rem, 5vw, 1.4rem); font-weight: 700;
+  direction: ltr; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
+/* الشريط بعلامتين: ما صُرف، وما كان يُفترض صرفُه حتى اليوم */
+.meter {
+  position: relative; height: 12px; margin: 14px 0 8px;
+  background: var(--surface-2); border-radius: 99px; overflow: hidden;
+}
+.meter-fill { height: 100%; background: var(--ok); border-radius: 99px; transition: width .3s; }
+.month-card.warn .meter-fill { background: var(--warn); }
+.month-card.danger .meter-fill { background: var(--danger); }
+.meter-mark { position: absolute; top: -3px; width: 2px; height: 18px; background: var(--fg); opacity: .5; }
+
+.month-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.mini { background: var(--surface-2); border-radius: 11px; padding: 10px 12px; }
+.mini-value { font-size: 1.15rem; font-weight: 700; direction: ltr; text-align: start; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.top-cats { list-style: none; margin: 6px 0 0; padding: 0; }
+.top-cats li { display: grid; grid-template-columns: minmax(5rem, 1fr) 2.2fr auto 2.6rem; gap: 8px; align-items: center; padding: 5px 0; font-size: .85rem; }
+.tc-bar { background: var(--surface-2); border-radius: 99px; height: 8px; overflow: hidden; }
+.tc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.tc-amount { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tc-share { color: var(--muted); text-align: end; }
+
 /* ── قائمة العمليات ────────────────────────────────────────── */
 .tx-list { list-style: none; margin: 0; padding: 0; }
 .tx-row {

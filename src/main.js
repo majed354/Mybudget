@@ -3,7 +3,7 @@
 import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence, rememberDeleted, forgetDeleted } from './store.js';
 import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from './import.js';
 import { applyClassification, suggestRule, CATEGORY_MAP } from './classify.js';
-import { analyze } from './analytics.js';
+import { analyze, monthSnapshot } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
 import { uid, groupBy, money, monthLabel } from './util.js';
 import * as Sync from './sync.js';
@@ -40,8 +40,8 @@ const state = {
 const ROUTES = {
   dashboard: { ar: 'لوحة القيادة', short: 'الرئيسية', icon: '📊', primary: true },
   analysis: { ar: 'التحليل', short: 'التحليل', icon: '🧭', primary: true },
-  financing: { ar: 'الملاءة والتمويل', short: 'الملاءة', icon: '🏦', primary: true },
   transactions: { ar: 'العمليات', short: 'العمليات', icon: '📜', primary: true },
+  financing: { ar: 'الملاءة والتمويل', icon: '🏦' },
   categories: { ar: 'المجالات', icon: '🧭' },
   commitments: { ar: 'الالتزامات', icon: '🔁' },
   beneficiaries: { ar: 'المستفيدون', icon: '👥' },
@@ -55,10 +55,12 @@ const ROUTES = {
  * الوجهات من ثمانٍ إلى أربع — وهو الحدّ الذي يسع شريطًا سفليًّا ثابتًا بلا
  * تمريرٍ أفقي، وعليه استقرّت تطبيقات المصارف.
  */
+// والملاءة معها: خدمةٌ تُسأل عند الحاجة إلى تمويل، لا سؤالَ كلِّ يوم
 const ANALYSIS_TABS = [
   { id: 'categories', ar: 'المجالات' },
   { id: 'commitments', ar: 'الالتزامات' },
   { id: 'beneficiaries', ar: 'المستفيدون' },
+  { id: 'financing', ar: 'الملاءة' },
 ];
 
 // ── الإقلاع ───────────────────────────────────────────────────────────────
@@ -328,6 +330,12 @@ async function reload() {
   state.analysis = state.transactions.length ? analyze(state.transactions, state.settings) : null;
   state.accountsSummary = buildAccountsSummary(state.transactions);
   state.reminders = computeReminders(state.analysis);
+  state.month = state.analysis
+    ? monthSnapshot(state.analysis, {
+      today: new Date().toISOString().slice(0, 10),
+      limit: +state.settings?.budget?.monthlyLimit || null,
+    })
+    : null;
   recompute();
 }
 
@@ -481,6 +489,8 @@ function bindEvents() {
     if (action === 'go-categories') { location.hash = 'categories'; return; }
     if (action === 'go-tag') { state.filter = { ...state.filter, onlyUncat: true, cat: '' }; location.hash = 'transactions'; return; }
     if (action === 'go-excluded') { state.filter = { ...state.filter, onlyExcluded: true }; location.hash = 'transactions'; return; }
+    if (action === 'go-settings') { location.hash = 'settings'; return; }
+    if (action === 'go-analysis') { location.hash = 'categories'; return; }
     if (action.startsWith('open-category')) {
       state.openCategory = el.dataset.cat || action.split(':')[1];
       if (state.route !== 'categories') location.hash = 'categories'; else render();
@@ -813,6 +823,7 @@ async function updateSettings() {
       minBufferMonths: numOr('p-buffer', 3),
       maxTerm: numOr('p-maxTerm', 72),
     },
+    budget: { monthlyLimit: blankOr('b-limit') },
     analysis: {
       excludeInternal: !!g('a-internal')?.checked,
       excludeReversals: !!g('a-rev')?.checked,
