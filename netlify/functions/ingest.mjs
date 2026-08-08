@@ -7,6 +7,7 @@
 // المفتاح، ولا يمكن لمن لا يعرفه أن يكتب في صندوقك أو يقرأه.
 
 import { getStore } from '@netlify/blobs';
+import { SENSITIVE_RE, foldArabic } from '../../src/sms-formats.js';
 
 const BOX_RE = /^[a-f0-9]{32,64}$/;
 const MAX_MESSAGE = 4000;      // رسالة بنكية لا تتجاوز هذا بحال
@@ -51,6 +52,12 @@ export default async (req) => {
         } catch { /* يبقى النصّ كما ورد */ }
       }
       if (!text) return json({ error: 'لا يوجد نصّ' }, 400);
+
+      // رمز التحقّق لا يُخزَّن أصلًا — لا يُحفظ ليُراجَع ولا لِيُمحى بمهلته.
+      // فالأتمتة تمرّر كل ما يصل من المصرف، ومنه رمزٌ يفتح الحساب متى سجّل
+      // صاحبه الدخول. وردُّه في المتصفح لا يكفي: يكون قد بلغ الخادم وأقام.
+      // ويُردّ بنجاحٍ لا بخطأ، لئلّا تُظهر أتمتة الجوال إنذارًا في كل مرة.
+      if (SENSITIVE_RE.test(foldArabic(text))) return json({ ok: true, stored: false, reason: 'رسالة رمز تحقّق' });
 
       const items = fresh((await store.get(box, { type: 'json' })) || []);
       items.push({ id: crypto.randomUUID(), text, sender, sentAt, receivedAt: new Date().toISOString() });

@@ -7,7 +7,7 @@ import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
   FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_RE, resolveDate, SELF_PARTY_RE,
   REJECTED_RE,
-  PROMO_SENDER_RE, PROMO_TEXT_RE,
+  PROMO_SENDER_RE, PROMO_TEXT_RE, SENSITIVE_RE,
 } from './sms-formats.js';
 
 const ENDPOINT = '/api/ingest';
@@ -49,6 +49,9 @@ export function parseBankSMS(text, { today = new Date().toISOString().slice(0, 1
 
   // نطابق على نصٍّ مُوحَّد الرسم، ونقتطع الأسماء من الأصل بالمواضع نفسها
   const F = foldArabic(raw);
+  // رمز التحقّق يُردّ بحقّه لا لعجز المحلّل عن إيجاد مبلغٍ فيه، ويُوسم
+  // `sensitive` ليُمحى من الصندوق فورًا بدل أن يُحفظ للمراجعة
+  if (SENSITIVE_RE.test(F)) return { ok: false, reason: 'رسالة رمز تحقّق — لا تُحفظ', sensitive: true };
   // ما لم يقع لا يُقيَّد — ويُقرأ من نصّ الرسالة لا من عجز المحلّل عن قراءتها
   if (REJECTED_RE.test(F)) return { ok: false, reason: 'عملية مرفوضة أو ملغاة لم تقع' };
   const bank = detectBank(F, sender);
@@ -206,15 +209,17 @@ export async function drain(secret, { accountLabel } = {}) {
   const { messages = [] } = await call('GET', box);
   if (!messages.length) return { added: [], failed: [] };
 
-  const added = [], failed = [], done = [];
+  const added = [], failed = [], purge = [];
   for (const m of messages) {
     const parsed = parseBankSMS(m.text, { today: (m.receivedAt || '').slice(0, 10) || undefined, sender: m.sender });
-    if (parsed.ok) added.push(smsToTransaction(parsed, m, accountLabel));
-    else failed.push({ ...m, reason: parsed.reason });
-    done.push(m.id);
+    if (parsed.ok) { added.push(smsToTransaction(parsed, m, accountLabel)); continue; }
+    // ما فيه سرّ يُمحى ولا يُعرض: لا يُراجَع رمزُ تحقّق، ولا يُنتظر انقضاء
+    // مهلته. أما ما لم يُفهم لسببٍ آخر فيبقى ليُراجَع ويُصلَح شكلُه.
+    if (parsed.sensitive) { purge.push(m.id); continue; }
+    failed.push({ ...m, reason: parsed.reason });
   }
   // لا نمسح ما لم يُفهم: يبقى ليُراجَع، ويُمسح بمهلته
-  const clear = added.map((t) => t.smsId).filter(Boolean);
+  const clear = [...added.map((t) => t.smsId), ...purge].filter(Boolean);
   if (clear.length) await call('DELETE', box, null, `&ids=${clear.join(',')}`);
   return { added, failed };
 }

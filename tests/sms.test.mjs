@@ -287,3 +287,32 @@ test('نوع عملية الرسالة أوثق من استنتاجه من نص�
   assert.equal(t.type, 'ecom', 'شراءٌ إلكتروني لا رسوم');
   assert.notEqual(t.category, 'fees');
 });
+
+test('رمز التحقّق يُردّ بحقّه ويُوسم ليُمحى — لا يُحفظ للمراجعة', () => {
+  // الأتمتة تمرّر كل ما يصل من المصرف، ومنه رمزٌ يفتح الحساب. وردُّه لعجز
+  // المحلّل عن إيجاد مبلغٍ فيه نجاةٌ بالمصادفة، وحفظُه في الصندوق خطر.
+  const codes = [
+    'كلمة مرور صالحة لمرة واحدة\nرمز: 1430\nلـ: تسجيل الدخول الى البلاد نت',
+    'رمز مؤقت:9703\nلـ:اصدار بطاقة صراف - جهاز الخدمة الذاتية',
+    'رمز التحقق 458912 لا تشاركه مع أحد',
+    'Your OTP is 774512, do not share it',
+  ];
+  for (const c of codes) {
+    const p = parseBankSMS(c, { sender: 'BankAlbilad' });
+    assert.equal(p.ok, false, c.slice(0, 30));
+    assert.equal(p.sensitive, true, 'يُوسم ليُمحى من الصندوق فورًا');
+  }
+  // ولا يُوسم بذلك إشعارٌ عاديّ ولا عمليةٌ صحيحة
+  assert.notEqual(parseBankSMS('عميلنا العزيز، تم تسجيل الدخول من جهاز جديد.').sensitive, true);
+  assert.notEqual(parseBankSMS(SMS.rajhiPos).sensitive, true);
+});
+
+test('تجّار صاحب النسخة بأسمائهم المقتطعة كما تصل من المصرف', async () => {
+  const { guessCategoryFromMerchant } = await import('../src/classify.js');
+  assert.equal(guessCategoryFromMerchant('Al-Abediy'), 'groceries');
+  assert.equal(guessCategoryFromMerchant('Albehani'), 'groceries');
+  assert.equal(guessCategoryFromMerchant('SHEIKH BU'), 'dining');
+  assert.equal(guessCategoryFromMerchant('SALEH ABD'), 'dining');
+  assert.equal(guessCategoryFromMerchant('Doc Deliv'), 'dining');
+  assert.equal(guessCategoryFromMerchant('AMAN CARS'), 'transport');
+});
