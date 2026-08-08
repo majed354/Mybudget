@@ -26,7 +26,7 @@ for (const f of files) {
   const res = rowsToTransactions(grid, { account, source: f, details: picked?.details });
   console.log(`\n▸ ${f}`);
   console.log(`  ورقة: ${picked?.name || '—'} | عمليات: ${res.transactions.length} | متجاوَز: ${res.skipped}`);
-  console.log(`  تدقيق الأرصدة: ${res.balanceCheck.checked ? `${res.balanceCheck.mismatches}/${res.balanceCheck.total} فرق` : 'غير متاح'}`);
+  console.log(`  تدقيق الأرصدة: ${res.balanceCheck?.checked ? `${res.balanceCheck.mismatches}/${res.balanceCheck.total} فرق` : 'غير متاح'}`);
   res.warnings.forEach((w) => console.log('  ⚠', w));
   all.push(...res.transactions);
 }

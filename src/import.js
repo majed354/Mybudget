@@ -94,6 +94,15 @@ const HEADER_PATTERNS = [
   ['amount', /(المبلغ|amount)/i],
 ];
 
+/**
+ * كم صفًّا يُفتَّش عن صفّ العناوين.
+ * كان خمسةً عند اختيار الورقة وخمسةَ عشرَ عند القراءة، وكشف الراجحي يضع
+ * عنوانه في الصف السادس عشر بعد ديباجةٍ فيها اسم العميل والرصيد ومعايير
+ * البحث — فكان يُرفض كاملًا: صفر عملية بلا سببٍ مفهوم للمستخدم.
+ * والتوسعة آمنة: `detectHeader` يشترط كلماتِ عناوينَ لا تجتمع في صفّ بيانات.
+ */
+const HEADER_SCAN_ROWS = 40;
+
 /** يحدد فهرس كل عمود من صف العناوين، أو يعيد null إن لم يكن الصف عنوانًا. */
 export function detectHeader(row) {
   if (!row || row.length < 3) return null;
@@ -207,7 +216,7 @@ export function pickStatementSheet(sheets) {
   for (const n of names) {
     if (n === detailsName) continue;
     const grid = sheets[n];
-    const hit = grid.slice(0, 5).some((r) => detectHeader(r));
+    const hit = grid.slice(0, HEADER_SCAN_ROWS).some((r) => detectHeader(r));
     if (!hit) continue;
     if (!best || grid.length > sheets[best].length) best = n;
   }
@@ -222,7 +231,7 @@ export function rowsToTransactions(rows, { account = 'حساب', source = '', de
   const warnings = [];
   let columns = null, startAt = 0;
 
-  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+  for (let i = 0; i < Math.min(rows.length, HEADER_SCAN_ROWS); i++) {
     const h = detectHeader(rows[i]);
     if (h) { columns = h; startAt = i + 1; break; }
   }

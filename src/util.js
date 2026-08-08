@@ -20,11 +20,14 @@ export function parseNumber(raw) {
   if (raw == null) return null;
   let s = normalizeDigits(raw).trim();
   if (!s) return null;
-  let neg = false;
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  if (/^-/.test(s)) { neg = true; s = s.slice(1); }
-  if (/-$/.test(s)) { neg = true; s = s.slice(0, -1); }
-  s = s.replace(/[^\d.,]/g, '');
+  // الإشارة السالبة قد تقع خلف رمز العملة: «SAR -2,984.44» و«ر.س -50.00».
+  // فيُفتَّش عنها في كلّ ما يسبق أوّل رقم، لا في أوّل النصّ وحده — إذ كان
+  // الفحص على أوّله فلا يجدها، ثم تُمحى مع سائر الحروف، فينقلب المدين
+  // دائنًا. ولا تُجرَّد الحروف قبل الفحص: نقطةُ «ر.س» تنجو منها فتُفسد الرقم.
+  const firstDigit = s.search(/\d/);
+  if (firstDigit < 0) return null;
+  const neg = /[-(]/.test(s.slice(0, firstDigit)) || /-\s*$/.test(s);
+  s = s.slice(firstDigit).replace(/[^\d.,]/g, '');
   if (!s) return null;
   // لو كان آخر فاصل «,» ويليه رقمان فهو عشري (نادر) وإلا فهو فاصل آلاف
   const lastComma = s.lastIndexOf(',');
