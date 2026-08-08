@@ -8,6 +8,7 @@ import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, 
 import { uid, groupBy, money, monthLabel } from './util.js';
 import * as Sync from './sync.js';
 import * as Inbox from './inbox.js';
+import { formOf } from './form-ids.js';
 import { computeReminders, ensurePermission, fireDue } from './reminders.js';
 import * as V from './views.js';
 
@@ -669,14 +670,17 @@ function bindEvents() {
     if (id === 'file-input') { await handleFiles(e.target.files); return; }
     if (id === 'acc-name') { state.importAccount = e.target.value; return; }
 
-    if (id?.startsWith('f-')) { updateFinance(); return; }
-    if (id === 'q' || id?.startsWith('f-c') || id === 'f-acc' || id === 'f-uncat' || id === 'f-exc') { updateFilter(); return; }
-    if (id?.startsWith('p-') || id?.startsWith('a-') || id?.startsWith('m-')) { await updateSettings(); return; }
+    // التوجيه بالعضوية الصريحة لا بالبادئة: راجع src/form-ids.js
+    const form = formOf(id);
+    if (form === 'finance') { updateFinance(); return; }
+    if (form === 'filter') { updateFilter(); return; }
+    if (form === 'settings') { await updateSettings(); return; }
   });
 
   app.addEventListener('input', (e) => {
+    const form = formOf(e.target.id);
     if (e.target.id === 'q') { clearTimeout(bindEvents._q); bindEvents._q = setTimeout(updateFilter, 250); }
-    if (e.target.id?.startsWith('f-')) { clearTimeout(bindEvents._f); bindEvents._f = setTimeout(updateFinance, 300); }
+    if (form === 'finance') { clearTimeout(bindEvents._f); bindEvents._f = setTimeout(updateFinance, 300); }
   });
 
   // السحب والإفلات
