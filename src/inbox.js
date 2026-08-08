@@ -7,7 +7,7 @@ import {
   detectBank, foldArabic, KIND_RULES, AMOUNT_FIELDS, FEE_RE, BALANCE_RE,
   FOREIGN_RE, PARTY_FIELDS, CARD_FIELDS, REF_RE, COUNTRY_RE, DATE_RE, resolveDate, SELF_PARTY_RE,
   REJECTED_RE,
-  PROMO_SENDER_RE, PROMO_TEXT_RE, SENSITIVE_RE,
+  PROMO_SENDER_RE, PROMO_TEXT_RE, SENSITIVE_RE, MISCONFIG_RE, stripHarakat,
 } from './sms-formats.js';
 
 const ENDPOINT = '/api/ingest';
@@ -52,6 +52,10 @@ export function parseBankSMS(text, { today = todayISO(), sender = '' } = {}) {
   // رمز التحقّق يُردّ بحقّه لا لعجز المحلّل عن إيجاد مبلغٍ فيه، ويُوسم
   // `sensitive` ليُمحى من الصندوق فورًا بدل أن يُحفظ للمراجعة
   if (SENSITIVE_RE.test(F)) return { ok: false, reason: 'رسالة رمز تحقّق — لا تُحفظ', sensitive: true };
+  // خطأ إعداد لا خطأ شكل — ويُسمّى باسمه لئلّا يُظنّ عجزًا عن قراءة رسالة
+  if (MISCONFIG_RE.test(stripHarakat(F))) {
+    return { ok: false, misconfig: true, reason: 'الأتمتة ترسل نصّ الشرح لا نصّ الرسالة — راجع حقل text في الاختصار' };
+  }
   // ما لم يقع لا يُقيَّد — ويُقرأ من نصّ الرسالة لا من عجز المحلّل عن قراءتها
   if (REJECTED_RE.test(F)) return { ok: false, reason: 'عملية مرفوضة أو ملغاة لم تقع' };
   const bank = detectBank(F, sender);

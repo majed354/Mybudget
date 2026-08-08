@@ -715,12 +715,20 @@ function inboxBody(state) {
       <li>الاختصارات ← <strong>الأتمتة</strong> ← + ← <strong>رسالة</strong>.</li>
       <li>«المرسِل» = مرسِلٌ واحد من الثلاثة، و«يحتوي على» اتركه فارغًا،
         ثم <strong>تشغيل فورًا</strong> (أطفئ «اسألني قبل التشغيل»).</li>
-      <li>أضف إجراء <strong>Get Contents of URL</strong> بالرابط أعلاه، الطريقة <code>POST</code>،
-        و<code>Request Body</code> = <strong>JSON</strong> بحقلين:
-        <br><code>text</code> = المتغيّر <strong>Shortcut Input</strong> (نصّ الرسالة)،
-        و<code>sender</code> = اسم المرسِل مكتوبًا بيدك.</li>
-      <li>كرّر الأتمتة لكل مرسِل: <code>BankAlbilad</code> و<code>AlRajhiBank</code> و<code>STC Bank</code>.</li>
+      <li>أضف إجراء <strong>Get Contents of URL</strong> بالرابط أعلاه، والطريقة <code>POST</code>،
+        و<code>Request Body</code> = <strong>JSON</strong>.</li>
+      <li><strong>الحقل الأول</strong> — المفتاح: اكتب <code>text</code>.
+        <br>والقيمة: <strong class="danger-text">لا تكتب فيها شيئًا</strong>. اضغط خانة القيمة، ثم اختر
+        <strong>مُدخل الاختصار</strong> من شريط المتغيّرات فوق لوحة المفاتيح — يظهر
+        <em>محاطًا بلونٍ مميّز</em>، وهذه علامة أنه متغيّر لا نصّ.</li>
+      <li><strong>الحقل الثاني</strong> — المفتاح: <code>sender</code>، والقيمة: اسم المرسِل وحده،
+        مثل <code>BankAlbilad</code> بلا زيادة.</li>
+      <li>كرّر الأتمتة لكل مرسِل: <code>BankAlbilad</code> و<code>AlRajhiBank</code> و<code>STC Bank</code>
+        — <strong>وأهمّها الراجحي</strong> إن كانت مشترياتك عليه.</li>
     </ol>
+    <p class="hint danger-text">⚠️ أكثر خطأ يقع في هذا الإعداد: كتابة وصف الحقل مكان قيمته. فإن رأيت
+      قيمةَ <code>text</code> نصًّا عاديًّا لا متغيّرًا ملوّنًا، فالأتمتة سترسل ذلك النصّ نفسه في كل مرة
+      ولن تصل رسالةٌ واحدة من مصرفك.</p>
     <p class="hint">حقل <code>sender</code> ليس زينة: به يُميَّز <code>AlRajhiBank</code> عن <code>AlRajhiB-AD</code>،
       فتُردّ العروض التسويقية ولا تدخل حسابك عمليةً لم تقع. ويكفي النصّ وحده جسمًا للطلب إن تعذّر JSON،
       لكنك تفقد هذا التمييز. ولا تُنشئ أتمتةً لمرسِلٍ ينتهي بـ<code>-AD</code> أصلًا.</p>
@@ -736,6 +744,14 @@ function inboxBody(state) {
     <p class="hint">${i.busy ? 'جارٍ…' : i.lastAt ? `آخر سحب: ${escapeHTML(new Date(i.lastAt).toLocaleString('ar-SA'))}` : 'لم يُسحب شيء بعد'}
       ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
     ${inboxHarvest(i)}
+    ${i.failed?.some((m) => m.misconfig) ? `<div class="alerts" style="border-inline-start-color:var(--danger)">
+      <p><strong class="danger-text">الأتمتة ترسل نصّ الشرح لا نصّ الرسالة.</strong>
+      في اختصارك، قيمةُ الحقل <code>text</code> نصٌّ مكتوب بدل متغيّر <strong>مُدخل الاختصار</strong>.
+      فتُرسَل العبارة نفسها في كل مرة، ولا تصل رسالةٌ واحدة من مصرفك.</p>
+      <p class="hint">العلاج: افتح الأتمتة ← احذف ما في خانة قيمة <code>text</code> ← اضغطها ثم اختر
+      <strong>مُدخل الاختصار</strong> من شريط المتغيّرات فوق لوحة المفاتيح. يجب أن تراه
+      <em>محاطًا بلونٍ مميّز</em> لا نصًّا عاديًّا.</p>
+    </div>` : ''}
     ${i.failed?.length ? `<h3>رسائل لم تُفهم (${num(i.failed.length)})</h3>
       <p class="hint">النصّ كاملًا لا مقتطعًا: بلا رؤيته لا يُعرف أهو شكلٌ جديد أم محرفٌ خفيّ أفسد القراءة.</p>
       <ul class="failed-list">${i.failed.slice(0, 8).map((m) => `<li>
