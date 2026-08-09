@@ -145,20 +145,6 @@ function importPreview(p) {
 }
 
 /**
- * صدر اللوحة: الشهر الجاري وحده — كم صُرف، وكم بقي من الحدّ، وكم وُفِّر،
- * وأين ذهب أكثره. هذه أسئلة اليوم، وما دونها تاريخٌ يُراجَع عند الحاجة.
- *
- * والشريط يحمل علامتين لا واحدة: ما صُرف، وما كان يُفترض صرفُه حتى اليوم لو
- * وُزّع الحدّ على أيام الشهر. فمن رأى الشريط دون العلامة عرف أنه في سعة،
- * ومن رآه فوقها عرف أنه أسرع من حدّه ولو بقي في الحدّ رصيد.
- */
-/** الوتيرة كلامًا: النسبة تُقرأ قرب الواحد، والمضاعفة أوضح متى بَعُدت عنه. */
-function paceAr(pace) {
-  if (pace >= 2) return `وتيرتك ${num(pace, 1)}× حدّك`;
-  return `أسرع من حدّك بـ${pct(pace - 1, 0)}`;
-}
-
-/**
  * توقّع الدورة القادمة: المعتاد + ما تعرفه أنت.
  * المتوسط وحده يكذب على من يعرف أن أمامه رسومًا دراسية أو سفرًا — والتطبيق
  * لا يعلمه وأنت تعلمه. فالمعرفتان تُجمعان قبل أن تبدأ الدورة لا بعدها.
@@ -241,11 +227,35 @@ function quarterDetail(w, state) {
  * ولا تُمنح إلا على ما انقضى أو على وتيرةٍ حقيقية — فمدحٌ في أول اليوم
  * على صرفٍ لم يقع بعدُ يفقد معناه سريعًا.
  */
+/**
+ * سلّمُ الوتيرة: خمس درجات، لكلٍّ رمزٌ ولونٌ وعبارة.
+ *
+ * سهمان أخضران لمن دبَّر، وسهمٌ لمن انضبط، ونقطةٌ صفراء لمن بلغ الحافّة،
+ * وسهمٌ أحمر لمن تجاوز، وسهمان لمن بَعُد عن حدّه. وهو نفسه في أداة الشاشة،
+ * فلا يرى صاحب النسخة حكمين مختلفين على حالٍ واحدة.
+ *
+ * والعبارة مشدودةٌ إلى الدرجة لا إلى المزاج: عبارةٌ مشجّعة فوق رقمٍ
+ * متجاوزٍ تُفسد الأداة كلَّها، ويسقط معها الرقمُ الصادق الذي بجانبها.
+ * وتُنتقى بيوم الدورة لا بالعشوائية، فلا ترتجف كلما أُعيد الرسم.
+ */
+const PACE_LADDER = [
+  { max: 0.70, m: '▲▲', cls: 'good', s: ['تدبيرٌ ممتاز', 'إمساكٌ حسن', 'دون المعتاد بكثير'] },
+  { max: 0.95, m: '▲', cls: 'good', s: ['على المسار', 'منضبطٌ حتى الآن', 'سِر على هذا'] },
+  { max: 1.05, m: '●', cls: 'ok', s: ['على الحافّة', 'وتيرتُك تقارب حدَّك'] },
+  { max: 1.30, m: '▼', cls: 'warn', s: ['فوق المعتاد، خفِّف', 'تجاوزتَ وتيرتك'] },
+  { max: Infinity, m: '▼▼', cls: 'bad', s: ['أوقف غير الضروري', 'الصرف بعيدٌ عن حدّك'] },
+];
+
+export function paceGrade(pace, day = 0) {
+  const r = Number.isFinite(pace) ? pace : 0;
+  const g = PACE_LADDER.find((x) => r <= x.max) || PACE_LADDER[PACE_LADDER.length - 1];
+  return { mark: g.m, cls: g.cls, say: g.s[Math.abs(Math.trunc(day)) % g.s.length] };
+}
+
 function mark(over, pace) {
-  if (over) return '<span class="mk bad" title="تجاوزتَ الحدّ">✕</span>';
-  if (pace > 1.05) return '<span class="mk warn" title="أسرع من وتيرتك">▲</span>';
-  if (pace < 0.85) return '<span class="mk good" title="أبطأ من وتيرتك — أحسنت">✓</span>';
-  return '<span class="mk ok" title="ضمن الوتيرة">●</span>';
+  // تجاوزُ الحدّ لا يُغتفر بوتيرةٍ حسنة: يُحطّ إلى درجة التجاوز على الأقلّ
+  const g = paceGrade(over ? Math.max(pace || 0, 1.06) : pace);
+  return `<span class="mk ${g.cls}" title="${g.say}">${g.mark}</span>`;
 }
 
 /** شريطٌ صغير لأفقٍ واحد: اليوم أو الأسبوع. */
@@ -259,11 +269,19 @@ function miniBar(label, h, tone) {
   </div>`;
 }
 
+/**
+ * صدر اللوحة: الشهر الجاري وحده — كم صُرف، وكم بقي من الحدّ، وكم وُفِّر،
+ * وأين ذهب أكثره. هذه أسئلة اليوم، وما دونها تاريخٌ يُراجَع عند الحاجة.
+ *
+ * والشريط يحمل علامتين لا واحدة: ما صُرف، وما كان يُفترض صرفُه حتى اليوم لو
+ * وُزّع الحدّ على أيام الشهر. فمن رأى الشريط دون العلامة عرف أنه في سعة،
+ * ومن رآه فوقها عرف أنه أسرع من حدّه ولو بقي في الحدّ رصيد.
+ */
 function monthCard(m, state) {
   if (!m) return '';
   const over = m.remaining < 0;
-  const fast = m.pace > 1.05;
-  const tone = over ? 'danger' : fast ? 'warn' : 'ok';
+  const vg = paceGrade(m.pace, m.day);
+  const tone = over ? 'danger' : m.pace > 1.05 ? 'warn' : 'ok';
   const fill = Math.min(100, Math.max(0, m.usedShare * 100));
   const markAt = Math.min(100, (m.day / m.daysInMonth) * 100);
 
@@ -291,7 +309,7 @@ function monthCard(m, state) {
         <div class="meter-mark" style="inset-inline-start:${markAt}%" title="ما كان يُفترض صرفُه حتى اليوم"></div>
       </div>
       <p class="hint">اليوم ${num(m.day)} من ${num(m.daysInMonth)} · استُهلك ${pct(m.usedShare)} من الحدّ
-        · ${fast ? `<strong class="warn-text">${paceAr(m.pace)}</strong>` : '<strong class="pos">ضمن الوتيرة</strong>'}
+        · <strong class="mk ${vg.cls}">${vg.mark} ${vg.say}</strong>
         · بهذه الوتيرة تنهي الشهر عند <strong>${money(m.projected, { round: true })}</strong>${m.overBy > 0 ? ` — بتجاوزٍ قدره ${money(m.overBy, { round: true })}` : ''}</p>
 
       ${m.isCurrent && m.today && m.week ? `<div class="horizons">
@@ -1117,7 +1135,24 @@ function bar(w, h, share, color) {
   return dc.getImage();
 }
 
-const sign = (share) => share > 1 ? '✕' : share > 0.9 ? '▲' : share < 0.6 ? '✓' : '●';
+/**
+ * سلّمٌ واحد لكل العلامات: سهمان أخضران لمن دبَّر، وسهمٌ لمن انضبط،
+ * ونقطةٌ صفراء لمن بلغ الحافّة، وسهمٌ أحمر لمن تجاوز، وسهمان لمن بَعُد.
+ *
+ * والنسبة تُقاس بالوتيرة لا بالرصيد: من صرف نصف حدّه في ثلث دورته لم
+ * يبقَ له نصف بل تجاوز. والعبارة مشدودةٌ إلى الدرجة، فلا تُجامل: عبارةٌ
+ * مشجّعة فوق رقمٍ متجاوزٍ تُفسد الأداة كلَّها ويسقط معها الرقم الصادق.
+ */
+const LADDER = [
+  { max: 0.70, m: '▲▲', c: OK,   s: ['تدبيرٌ ممتاز', 'إمساكٌ حسن', 'دون المعتاد بكثير'] },
+  { max: 0.95, m: '▲',  c: OK,   s: ['على المسار', 'منضبطٌ حتى الآن', 'سِر على هذا'] },
+  { max: 1.05, m: '●',  c: WARN, s: ['على الحافّة', 'وتيرتُك تقارب حدَّك'] },
+  { max: 1.30, m: '▼',  c: BAD,  s: ['فوق المعتاد، خفِّف', 'تجاوزتَ وتيرتك'] },
+  { max: Infinity, m: '▼▼', c: BAD, s: ['أوقف غير الضروري', 'الصرف بعيدٌ عن حدّك'] },
+];
+const grade = (r) => LADDER.find((g) => r <= g.max) || LADDER[LADDER.length - 1];
+const sign = (share) => grade(share).m;
+// الرصيد يُقاس بحدّه لا بسلّم الوتيرة: تجاوزُ الحدّ أحمرُ ولو بريال
 const tone = (share) => share > 1 ? BAD : share > 0.9 ? WARN : OK;
 
 let d = null;
@@ -1185,10 +1220,20 @@ if (!d) {
     }
   };
 
-  // تُضاف من اليسار: فتُقرأ من اليمين «اليوم» ثم «الربع» ثم «وُفِّر»
-  // ووُفِّر = ما دخل ناقصَ ما صُرف، فلا يُفهم بلا ذكر الدخل الذي قيس عليه.
-  col('وُفِّر', money(d.saved), 0, 0, d.saved >= 0 ? OK : BAD,
-    d.income > 0 ? 'من دخل ' + money(d.income) : 'لا دخل مسجَّل');
+  // تُقرأ من اليمين: «اليوم» ثم «الربع» ثم «الوتيرة». والوتيرةُ حكمُ الدورة
+  // كلِّها: صرفُك منسوبًا إلى ما كان ينبغي أن تكون صرفتَه في يومك هذا.
+  // والعبارة تُنتقى بيوم الدورة لا بالعشوائية: العشوائيُّ يرتجف كلما
+  // أُنعشت الأداة في اليوم الواحد، فيُفقدها الرصانة.
+  const g = grade(d.pace || 0);
+  const pcol = cols.addStack();
+  pcol.layoutVertically();
+  pcol.size = new Size(104, 0);
+  const gl = pcol.addStack(); gl.addSpacer();
+  T(gl, 'الوتيرة', 9, DIM);
+  const gv = pcol.addStack(); gv.addSpacer();
+  T(gv, g.m + ' ' + Math.round((d.pace || 0) * 100) + '%', 14, g.c, true);
+  const gs = pcol.addStack(); gs.addSpacer();
+  T(gs, g.s[(d.day || 0) % g.s.length], 9, g.c, true);
   cols.addSpacer();
   col('الربع', money(d.weekSpent) + ' / ' + money(d.weekLimit), d.weekSpent, d.weekLimit);
   cols.addSpacer();

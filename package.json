@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test tests/engine.test.mjs tests/sync.test.mjs tests/inbox.test.mjs tests/sms.test.mjs tests/widget.test.mjs tests/forms.test.mjs",
+    "test": "node --test tests/engine.test.mjs tests/sync.test.mjs tests/inbox.test.mjs tests/sms.test.mjs tests/widget.test.mjs tests/forms.test.mjs tests/pace.test.mjs",
     "start": "python3 -m http.server 8777"
   },
   "license": "MIT",
