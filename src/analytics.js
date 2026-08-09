@@ -1,6 +1,6 @@
 // محرّك التحليل: من قائمة عمليات خام إلى صورة إنفاق قابلة لاتخاذ القرار.
 
-import { monthKey, cycleKey, cycleBounds, cycleProgress, median, percentile, mean, cv, trendSlope, groupBy, sum } from './util.js';
+import { monthKey, cycleKey, cycleBounds, cycleProgress, DEFAULT_CYCLE_START, median, percentile, mean, cv, trendSlope, groupBy, sum } from './util.js';
 
 /**
  * دورة الميزانية بدل الشهر التقويمي.
@@ -185,7 +185,7 @@ export function analyzeIncome(list) {
 // ── التحليل الشامل ────────────────────────────────────────────────────────
 
 export function analyze(transactions, settings = {}) {
-  CYCLE_START = Number(settings?.budget?.cycleStartDay) || 1;
+  CYCLE_START = Number(settings?.budget?.cycleStartDay) || DEFAULT_CYCLE_START;
   const list = transactions.slice();
   markExclusions(list, settings);
 
@@ -432,7 +432,7 @@ export function latestBalances(transactions) {
  *
  * و`key` يسمح بتصفّح الدورات الماضية بالحساب نفسه، فلا يُكتب حسابان.
  */
-export function cycleSnapshot(a, { today, limit = null, startDay = 1, key = null, topN = 5 } = {}) {
+export function cycleSnapshot(a, { today, limit = null, startDay = DEFAULT_CYCLE_START, key = null, topN = 5 } = {}) {
   if (!a || !a.months?.length) return null;
   const cycle = key || cycleKey(today, startDay);
   const { from, to, days, elapsed } = cycleProgress(cycle, startDay, today);
@@ -538,7 +538,7 @@ export function cycleSnapshot(a, { today, limit = null, startDay = 1, key = null
  * ما يعرفه المحرّك (وسيط الصرف) إلى ما يُدخله المستخدم من بنودٍ مخطَّطة،
  * فيخرج استهلاكٌ تقريبيّ يُقارَن بالحدّ قبل أن تبدأ الدورة لا بعدها.
  */
-export function forecastNext(a, { today, limit = null, startDay = 1, planned = [] } = {}) {
+export function forecastNext(a, { today, limit = null, startDay = DEFAULT_CYCLE_START, planned = [] } = {}) {
   if (!a) return null;
   const current = cycleKey(today, startDay);
   const [y, m] = current.split('-').map(Number);

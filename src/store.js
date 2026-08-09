@@ -1,5 +1,7 @@
 // تخزين محلي بالكامل داخل المتصفح (IndexedDB). لا يغادر أي رقم جهازك.
 
+import { DEFAULT_CYCLE_START } from './util.js';
+
 const DB_NAME = 'mybudget';
 const DB_VERSION = 1;
 
@@ -118,7 +120,7 @@ export const DEFAULT_SETTINGS = {
   // حدّ الإنفاق الشهري: فارغٌ = يُشتقّ من وسيط صرفك، فيبدأ العدّاد ذا معنى
   // قبل أن يضبطه المستخدم، ثم يستبدله برقمه متى شاء.
   // الدورة: يومُ بدايتها (٢٧ لمن ينزل راتبه فيه)، والبنود المخطَّطة للقادمة
-  budget: { monthlyLimit: '', cycleStartDay: 1, planned: [] },
+  budget: { monthlyLimit: '', cycleStartDay: DEFAULT_CYCLE_START, planned: [] },
   // أداة الشاشة: رمزٌ عشوائي مستقلّ عن مفتاح المزامنة، فإبطاله لا يمسّها
   widget: { token: '', enabled: false },
   // أصنافٌ فرعية أضافها المستخدم فوق المجهّزة، لتُقترح في المرات التالية

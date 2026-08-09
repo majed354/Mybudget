@@ -1,6 +1,6 @@
 // واجهات العرض — كل دالة تُعيد HTML، والتفاعل يمرّ عبر data-action.
 
-import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION, todayISO } from './util.js';
+import { money, num, pct, monthLabel, dateLabel, escapeHTML, APP_VERSION, todayISO, DEFAULT_CYCLE_START } from './util.js';
 import { donut, hbars, monthlyChart, stackedBar, gauge, sparkline } from './charts.js';
 import { CATEGORIES, CATEGORY_MAP, TYPES, subcategoriesFor } from './classify.js';
 import { VERDICT, VERDICT_AR, installmentOf, effectiveAPR } from './affordability.js';
@@ -834,7 +834,7 @@ export function viewSettings(state, a) {
       <p class="hint">هو ما تقيس به شهرك: كم صُرف، وكم بقي، وهل وتيرتك أسرع من حدّك.
         اتركه فارغًا ليُشتقّ من وسيط صرفك${a?.spend?.median ? ` — وهو الآن ${money(a.spend.median, { round: true })}` : ''}.</p>
       ${numField('b-limit', 'الحدّ الشهري (ر.س)', s.budget?.monthlyLimit ?? '', 'مُشتقّ من كشوفك')}
-      ${numField('b-start', 'يوم بداية الدورة', s.budget?.cycleStartDay ?? 1)}
+      ${numField('b-start', 'يوم بداية الدورة', s.budget?.cycleStartDay ?? DEFAULT_CYCLE_START)}
       <p class="hint">من ينزل راتبه يوم ٢٧ يعيش دورةً من ٢٧ إلى ٢٦، وقياسُه بالشهر التقويمي يقطع دورته
         نصفين: نصفٌ في شهرٍ ونصفٌ في آخر. واضبطه <code>27</code> فتصير دورة أغسطس من ٢٧ يوليو إلى ٢٦ أغسطس.
         و<code>1</code> يعني الشهر التقويمي كما كان.</p>

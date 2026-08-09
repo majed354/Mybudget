@@ -1,7 +1,7 @@
 // أدوات مشتركة: تنسيق، أرقام عربية، إحصاء وصفي.
 
 /** رقم النسخة — يظهر في الإعدادات ليُعرف أي شيفرة تعمل فعلًا على الجهاز. */
-export const APP_VERSION = '1.26.0';
+export const APP_VERSION = '1.27.0';
 
 export const AR_DIGITS = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9', '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9' };
 
@@ -220,14 +220,21 @@ export function escapeHTML(s) {
  */
 const pad = (n) => String(n).padStart(2, '0');
 
-export function cycleKey(isoDate, startDay = 1) {
+/**
+ * يومُ بداية الدورة افتراضًا.
+ * ثابتٌ واحد يُبنى عليه في كل موضع — الحسابُ والنموذجُ والحقل — فلا يبقى
+ * الرقم مبعثرًا في ستة ملفات يُنسى أحدُها فتختلف دورتان في تطبيقٍ واحد.
+ */
+export const DEFAULT_CYCLE_START = 27;
+
+export function cycleKey(isoDate, startDay = DEFAULT_CYCLE_START) {
   const [y, m, d] = String(isoDate).split('-').map(Number);
   if (!(startDay > 1) || d < startDay) return `${y}-${pad(m)}`;
   return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
 }
 
 /** حدّا الدورة: أوّل يومٍ فيها وآخره. */
-export function cycleBounds(key, startDay = 1) {
+export function cycleBounds(key, startDay = DEFAULT_CYCLE_START) {
   const [y, m] = String(key).split('-').map(Number);
   if (!(startDay > 1)) {
     return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(new Date(Date.UTC(y, m, 0)).getUTCDate())}` };

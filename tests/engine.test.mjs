@@ -435,8 +435,9 @@ test('صورة الشهر: ما صُرف، وما بقي من الحدّ، وا�
     months: [{ key: '2026-08', spend: 6000, income: 20000, byCategory: { groceries: 3000, dining: 2000, transport: 1000 } }],
     spend: { median: 12000 },
   };
-  // اليوم العاشر من واحدٍ وثلاثين، والحدّ ١٢ ألفًا
-  const m = monthSnapshot(a, { today: '2026-08-10', limit: 12000 });
+  // اليوم العاشر من واحدٍ وثلاثين، والحدّ ١٢ ألفًا. والشهر تقويميٌّ هنا
+  // بالنصّ لا بالافتراض: المقصود حسابُ الصورة لا يومُ بداية الدورة.
+  const m = monthSnapshot(a, { today: '2026-08-10', limit: 12000, startDay: 1 });
   assert.equal(m.spent, 6000);
   assert.equal(m.remaining, 6000);
   assert.equal(+m.usedShare.toFixed(3), 0.5);
@@ -603,9 +604,12 @@ test('الدورة تُسمّى بالشهر الذي تنتهي فيه', async 
   assert.equal(cycleKey('2026-08-26', 27), '2026-08');
   assert.equal(cycleKey('2026-08-27', 27), '2026-09');
   assert.equal(cycleKey('2026-12-28', 27), '2027-01', 'وتعبر رأس السنة');
-  // وبلا ضبطٍ يبقى الشهر التقويمي كما كان
+  // ومن ضبطها على ١ صراحةً بقي على الشهر التقويمي
   assert.equal(cycleKey('2026-08-27', 1), '2026-08');
-  assert.equal(cycleKey('2026-08-27'), '2026-08');
+  assert.equal(cycleKey('2026-08-26', 1), '2026-08');
+  // وبلا ضبطٍ فالافتراضي ٢٧، لا أوّلُ الشهر التقويمي
+  assert.equal(cycleKey('2026-08-27'), '2026-09');
+  assert.equal(cycleKey('2026-08-26'), '2026-08');
 });
 
 test('حدّا الدورة وعدد أيامها وما مضى منها', async () => {
@@ -743,4 +747,20 @@ test('توزيعة الأرباع مثبَّتة لكل شهور السنة، و
       assert.equal(gap, 1, `لا فجوة ولا تداخل بين ربعَي ${key}`);
     }
   }
+});
+
+// الرقم كان مبعثرًا في ستة مواضع، ونسيانُ أحدها يجعل دورتين في تطبيقٍ واحد
+test('يوم بداية الدورة افتراضًا ٢٧ في كل موضع', async () => {
+  const { DEFAULT_CYCLE_START, cycleKey, cycleBounds } = await import('../src/util.js');
+  const { DEFAULT_SETTINGS } = await import('../src/store.js');
+  const { cycleSnapshot, forecastNext } = await import('../src/analytics.js');
+
+  assert.equal(DEFAULT_CYCLE_START, 27);
+  assert.equal(DEFAULT_SETTINGS.budget.cycleStartDay, DEFAULT_CYCLE_START, 'النموذج');
+  assert.equal(cycleKey('2026-08-27'), '2026-09', 'مفتاح الدورة');
+  assert.deepEqual(cycleBounds('2026-08'), { from: '2026-07-27', to: '2026-08-26' }, 'حدّا الدورة');
+
+  const a = { months: [{ key: '2026-08', spend: 3100, income: 0, byCategory: {} }], spend: { median: 3100 }, list: [] };
+  assert.equal(cycleSnapshot(a, { today: '2026-08-10', limit: 3100 }).from, '2026-07-27', 'صورة الدورة');
+  assert.equal(forecastNext(a, { today: '2026-08-10', limit: 3100 }).from, '2026-08-27', 'توقّع القادمة');
 });

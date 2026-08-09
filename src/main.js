@@ -5,7 +5,7 @@ import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from '
 import { applyClassification, suggestRule, CATEGORY_MAP, subcategoriesFor } from './classify.js';
 import { analyze, cycleSnapshot, forecastNext } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
-import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO, shiftCycle } from './util.js';
+import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO, shiftCycle, DEFAULT_CYCLE_START } from './util.js';
 import * as Sync from './sync.js';
 import * as Inbox from './inbox.js';
 import { formOf } from './form-ids.js';
@@ -363,7 +363,7 @@ async function reload() {
   state.accountsSummary = buildAccountsSummary(state.transactions);
   state.reminders = computeReminders(state.analysis);
   // الدورة المعروضة قد تكون سابقةً يتصفّحها المستخدم، والحسابُ واحد
-  const startDay = Number(state.settings?.budget?.cycleStartDay) || 1;
+  const startDay = Number(state.settings?.budget?.cycleStartDay) || DEFAULT_CYCLE_START;
   const opts = { today: todayISO(), limit: +state.settings?.budget?.monthlyLimit || null, startDay };
   state.month = state.analysis ? cycleSnapshot(state.analysis, opts) : null;
   state.viewCycle = state.analysis && state.cycleKey
@@ -1107,7 +1107,7 @@ async function updateSettings() {
     },
     budget: {
       monthlyLimit: blankOr('b-limit'),
-      cycleStartDay: Math.min(28, Math.max(1, numOr('b-start', 1))),
+      cycleStartDay: Math.min(28, Math.max(1, numOr('b-start', DEFAULT_CYCLE_START))),
       planned: state.settings?.budget?.planned || [],
     },
     analysis: {
