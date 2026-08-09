@@ -1083,17 +1083,22 @@ const URL_ = ${JSON.stringify(url)};
 const APP_ = ${JSON.stringify(location.origin)};
 
 const money = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n || 0));
-const R = (t, size, color, bold) => {
-  const x = t;
+const OK = new Color('#22c55e'), WARN = new Color('#f59e0b'), BAD = new Color('#ef4444'), DIM = new Color('#9ca3af');
+
+const T = (parent, text, size, color, bold) => {
+  const x = parent.addText(text);
   x.font = bold ? Font.boldSystemFont(size) : Font.systemFont(size);
   if (color) x.textColor = color;
-  x.rightAlignText();   // العربية تُقرأ من اليمين
+  x.rightAlignText();          // العربية تُقرأ من اليمين
+  x.lineLimit = 1;             // سطرٌ واحد: الالتفاف يقطع آخر البطاقة
   return x;
 };
 
-// الشريط يُرسم صورةً لا مكدّسات: المكدّس ذو الحجم الثابت يتفاوت عرضه بين
-// أحجام الأدوات، والرسم يضبط النسبة تمامًا.
-function barImage(share, color, w = 320, h = 12) {
+/**
+ * الشريط يُرسم صورةً بعرضٍ يُمرَّر إليه، لا بعرضٍ ثابت: الأداة المتوسطة
+ * عريضةٌ قصيرة، وشريطٌ يملأ سطرها كلَّه يُثقلها ويُخرج آخرها عن حدّها.
+ */
+function bar(w, h, share, color) {
   const dc = new DrawContext();
   dc.size = new Size(w, h);
   dc.opaque = false;
@@ -1101,7 +1106,7 @@ function barImage(share, color, w = 320, h = 12) {
   const track = new Path();
   track.addRoundedRect(new Rect(0, 0, w, h), h / 2, h / 2);
   dc.addPath(track);
-  dc.setFillColor(new Color('#9ca3af', 0.28));
+  dc.setFillColor(new Color('#9ca3af', 0.25));
   dc.fillPath();
   const fw = Math.max(h, Math.min(w, w * share));
   const fill = new Path();
@@ -1112,6 +1117,9 @@ function barImage(share, color, w = 320, h = 12) {
   return dc.getImage();
 }
 
+const sign = (share) => share > 1 ? '✕' : share > 0.9 ? '▲' : share < 0.6 ? '✓' : '●';
+const tone = (share) => share > 1 ? BAD : share > 0.9 ? WARN : OK;
+
 let d = null;
 try {
   const req = new Request(URL_);
@@ -1121,88 +1129,75 @@ try {
 } catch (e) { /* بلا اتصال: تبقى الأداة على آخر ما رُسم */ }
 
 const w = new ListWidget();
-w.setPadding(14, 14, 14, 14);
-w.url = APP_;   // الضغط على الأداة يفتح التطبيق
+w.setPadding(12, 13, 12, 13);
+w.url = APP_;
 
 if (!d) {
-  R(w.addText('ميزانيتي'), 14, null, true);
-  R(w.addText('لا يوجد ملخّص بعد — افتح التطبيق'), 12, Color.gray());
+  T(w, 'ميزانيتي', 14, null, true);
+  T(w, 'لا يوجد ملخّص بعد — افتح التطبيق', 12, DIM);
 } else {
-  const over = d.remaining < 0;
-  const fast = d.pace > 1.05;
-  const accent = over ? new Color('#dc2626') : fast ? new Color('#d97706') : new Color('#059669');
+  const share = d.limit > 0 ? d.spent / d.limit : 0;
+  const accent = tone(share);
 
+  // ── الصفّ الأعلى: الرقم الكبير يمينًا، وموضع الدورة يسارًا ──
   const head = w.addStack();
+  head.layoutHorizontally();
+  head.centerAlignContent();
+  const meta = head.addStack();
+  meta.layoutVertically();
+  T(meta, 'اليوم ' + d.day + ' من ' + d.daysInMonth, 10, DIM);
+  T(meta, 'المتوقَّع ' + money(d.projected), 10, DIM);
   head.addSpacer();
-  R(head.addText('صُرف هذا الشهر'), 11, Color.gray());
+  const main = head.addStack();
+  main.layoutVertically();
+  T(main, 'صُرف هذه الدورة', 10, DIM);
+  T(main, money(d.spent) + ' ر.س', 24, null, true);
 
-  const big = w.addStack();
-  big.addSpacer();
-  R(big.addText(money(d.spent) + ' ر.س'), 28, null, true);
-
+  w.addSpacer(3);
   const rem = w.addStack();
   rem.addSpacer();
-  const cycleSign = over ? '✕' : fast ? '▲' : d.pace < 0.85 ? '✓' : '●';
-  R(rem.addText(cycleSign + ' ' + (over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit)), 12, accent, true);
-
-  w.addSpacer(6);
-  const share = d.limit > 0 ? Math.max(0, Math.min(1, d.spent / d.limit)) : 0;
-  w.addImage(barImage(share, accent)).imageSize = new Size(320, 12);
+  T(rem, sign(share) + ' ' + (d.remaining < 0 ? 'تجاوزتَ بـ' + money(-d.remaining) : 'بقي ' + money(d.remaining)) + ' من ' + money(d.limit), 11, accent, true);
   w.addSpacer(4);
+  w.addImage(bar(300, 7, Math.min(1, share), accent)).imageSize = new Size(300, 7);
 
-  // «٨/٣١» بين نصٍّ عربي يُقرأ مقلوبًا فيُظنّ اليومَ الحاديَ والثلاثين،
-  // و«من» تفصل الرقمين فيبقى كلٌّ في موضعه مهما كان اتجاه السطر.
-  // شريطان أصغر لليوم والأسبوع: الدورة تُطمئن والأسبوع يُنذر واليوم يُقرّر
-  const OK = new Color('#059669'), WARN = new Color('#d97706'), BAD = new Color('#dc2626');
-  const small = (label, sp, cap) => {
-    if (!(cap > 0)) return;
-    const over = sp > cap;
-    const share = sp / cap;
-    // علامةٌ تُشجّع أو تُنذر: الرقم وحده أصمّ، والعلامة تُبقي على العادة
-    const sign = over ? '✕' : share > 0.9 ? '▲' : share < 0.6 ? '✓' : '●';
-    const col = over ? BAD : share > 0.9 ? WARN : OK;
-    w.addSpacer(5);
-    const st = w.addStack();
-    st.addSpacer();
-    R(st.addText(sign + ' ' + label + ' ' + money(sp) + ' من ' + money(cap)), 10, col, true);
-    w.addImage(barImage(Math.min(1, share), col, 320, 6)).imageSize = new Size(320, 6);
+  // ── ثلاثة أعمدة: اليوم، الربع، ووُفِّر — تستغلّ عرض الأداة بدل إطالتها ──
+  w.addSpacer(8);
+  const cols = w.addStack();
+  cols.layoutHorizontally();
+
+  const col = (label, value, sp, cap, color) => {
+    const c = cols.addStack();
+    c.layoutVertically();
+    c.size = new Size(92, 0);
+    const hasBar = cap > 0;
+    const sh = hasBar ? sp / cap : 0;
+    const l = c.addStack(); l.addSpacer();
+    T(l, (hasBar ? sign(sh) + ' ' : '') + label, 9, DIM);
+    const v = c.addStack(); v.addSpacer();
+    T(v, value, 13, color || (hasBar ? tone(sh) : null), true);
+    if (hasBar) {
+      c.addSpacer(3);
+      c.addImage(bar(92, 5, Math.min(1, sh), tone(sh))).imageSize = new Size(92, 5);
+    }
   };
-  small('اليوم', d.todaySpent, d.dayLimit);
-  small('الربع', d.weekSpent, d.weekLimit);
 
-  w.addSpacer(4);
-  const pace = w.addStack();
-  pace.addSpacer();
-  R(pace.addText('اليوم ' + d.day + ' من ' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected)), 10, Color.gray());
+  // تُضاف من اليسار: فتُقرأ من اليمين «اليوم» ثم «الربع» ثم «وُفِّر»
+  col('وُفِّر', money(d.saved), 0, 0, d.saved >= 0 ? OK : BAD);
+  cols.addSpacer();
+  col('الربع', money(d.weekSpent) + ' / ' + money(d.weekLimit), d.weekSpent, d.weekLimit);
+  cols.addSpacer();
+  col('اليوم', money(d.todaySpent) + ' / ' + money(d.dayLimit), d.todaySpent, d.dayLimit);
 
-  // وطزاجة الأرقام تُقال صراحةً: الأداة تعرض آخر ما نُشر، فإن لم يُفتح
-  // التطبيق اليوم فهي أرقام أمس — وسكوتُها عن ذلك يُضلّل.
-  const stamp = String(d.at || '').slice(0, 10);
+  // ── سطرٌ أخير واحد: أكبر مجال، أو تنبيه القِدَم إن كانت الأرقام من أمس ──
   const now = new Date();
   const nowISO = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-  if (stamp && stamp !== nowISO) {
-    const st = w.addStack();
-    st.addSpacer();
-    R(st.addText('⚠︎ أرقام ' + stamp + ' — افتح التطبيق ليتحدّث'), 9, new Color('#d97706'));
-  }
-
+  const stamp = String(d.at || '').slice(0, 10);
+  const top = (d.top || [])[0];
   w.addSpacer(6);
   const foot = w.addStack();
   foot.addSpacer();
-  R(foot.addText('صُرف اليوم ' + money(d.todaySpent) + ' · وُفِّر ' + money(d.saved)), 11,
-    d.saved >= 0 ? new Color('#059669') : new Color('#dc2626'), true);
-
-  const top = (d.top || [])[0];
-  if (top) {
-    const s = w.addStack();
-    s.addSpacer();
-    R(s.addText('أكبر مجال: ' + top.n + ' ' + money(top.a)), 10, Color.gray());
-  }
-  if (d.last) {
-    const s = w.addStack();
-    s.addSpacer();
-    R(s.addText('آخر عملية: ' + d.last.n + ' ' + money(d.last.a)), 10, Color.gray());
-  }
+  if (stamp && stamp !== nowISO) T(foot, '⚠︎ أرقام ' + stamp + ' — افتح التطبيق', 9, WARN);
+  else if (top) T(foot, 'أكبر مجال: ' + top.n + ' ' + money(top.a), 9, DIM);
 }
 
 if (config.runsInWidget) Script.setWidget(w);
