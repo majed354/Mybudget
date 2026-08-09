@@ -430,7 +430,7 @@ test('نقطة التحوّل: التحويل إلى حساباتك صرفٌ ق�
 // ── صورة الشهر الجاري ─────────────────────────────────────────────────────
 
 test('صورة الشهر: ما صُرف، وما بقي من الحدّ، والوتيرة، والمتوقَّع', async () => {
-  const { monthSnapshot } = await import('../src/analytics.js');
+  const { cycleSnapshot: monthSnapshot } = await import('../src/analytics.js');
   const a = {
     months: [{ key: '2026-08', spend: 6000, income: 20000, byCategory: { groceries: 3000, dining: 2000, transport: 1000 } }],
     spend: { median: 12000 },
@@ -450,7 +450,7 @@ test('صورة الشهر: ما صُرف، وما بقي من الحدّ، وا�
 });
 
 test('بلا حدٍّ مضبوط يُشتقّ من وسيط الصرف فيبقى العدّاد ذا معنى', async () => {
-  const { monthSnapshot } = await import('../src/analytics.js');
+  const { cycleSnapshot: monthSnapshot } = await import('../src/analytics.js');
   const a = { months: [{ key: '2026-08', spend: 1000, income: 0, byCategory: {} }], spend: { median: 9000 } };
   const m = monthSnapshot(a, { today: '2026-08-15', limit: null });
   assert.equal(m.limit, 9000);
@@ -459,7 +459,7 @@ test('بلا حدٍّ مضبوط يُشتقّ من وسيط الصرف فيبق�
 });
 
 test('شهرٌ بلا عمليات لا يكسر الصورة', async () => {
-  const { monthSnapshot } = await import('../src/analytics.js');
+  const { cycleSnapshot: monthSnapshot } = await import('../src/analytics.js');
   const a = { months: [{ key: '2026-07', spend: 500, income: 0, byCategory: {} }], spend: { median: 4000 } };
   const m = monthSnapshot(a, { today: '2026-08-03', limit: 4000 });
   assert.equal(m.spent, 0);
@@ -590,4 +590,100 @@ test('قاموس المجالات يشمل الوارد كما يشمل الصا
   for (const c of income) {
     assert.ok(!ESSENTIAL_GROUPS.has(c.group) && !FLEX_GROUPS.has(c.group) && !AMBIGUOUS_GROUPS.has(c.group), c.id);
   }
+});
+
+// ── دورة الميزانية: شهرٌ ماليّ يبدأ يوم الراتب ────────────────────────────
+
+test('الدورة تُسمّى بالشهر الذي تنتهي فيه', async () => {
+  const { cycleKey } = await import('../src/util.js');
+  // من راتبه يوم ٢٧: ما بدأ ٢٧ يوليو هو دورة أغسطس
+  assert.equal(cycleKey('2026-07-26', 27), '2026-07', 'ما قبل السابع والعشرين من الدورة السابقة');
+  assert.equal(cycleKey('2026-07-27', 27), '2026-08');
+  assert.equal(cycleKey('2026-08-01', 27), '2026-08');
+  assert.equal(cycleKey('2026-08-26', 27), '2026-08');
+  assert.equal(cycleKey('2026-08-27', 27), '2026-09');
+  assert.equal(cycleKey('2026-12-28', 27), '2027-01', 'وتعبر رأس السنة');
+  // وبلا ضبطٍ يبقى الشهر التقويمي كما كان
+  assert.equal(cycleKey('2026-08-27', 1), '2026-08');
+  assert.equal(cycleKey('2026-08-27'), '2026-08');
+});
+
+test('حدّا الدورة وعدد أيامها وما مضى منها', async () => {
+  const { cycleBounds, cycleProgress } = await import('../src/util.js');
+  assert.deepEqual(cycleBounds('2026-08', 27), { from: '2026-07-27', to: '2026-08-26' });
+  assert.deepEqual(cycleBounds('2026-08', 1), { from: '2026-08-01', to: '2026-08-31' });
+
+  const p = cycleProgress('2026-08', 27, '2026-08-09');
+  assert.equal(p.days, 31, 'من ٢٧ يوليو إلى ٢٦ أغسطس');
+  assert.equal(p.elapsed, 14, 'واليوم التاسع من أغسطس هو الرابع عشر من الدورة');
+});
+
+test('دورةٌ تبدأ يومًا لا يبلغه الشهر تُقصّ إلى آخره', async () => {
+  const { cycleBounds } = await import('../src/util.js');
+  // من دورته تبدأ ٣١ لا يجد ٣١ في فبراير
+  assert.deepEqual(cycleBounds('2026-03', 31), { from: '2026-02-28', to: '2026-03-30' });
+});
+
+test('صورة الدورة على بدايةٍ مخصَّصة، بثلاثة آفاق', async () => {
+  const { cycleSnapshot } = await import('../src/analytics.js');
+  const a = {
+    months: [{ key: '2026-08', spend: 6200, income: 24000, byCategory: { groceries: 4000, dining: 2200 } }],
+    spend: { median: 15000 },
+    list: [
+      { date: '2026-07-28', amount: -1000, excluded: false },
+      { date: '2026-08-05', amount: -3000, excluded: false },
+      { date: '2026-08-08', amount: -1500, excluded: false, merchant: 'أمس' },
+      { date: '2026-08-09', amount: -700, excluded: false, merchant: 'اليوم' },
+    ],
+  };
+  const m = cycleSnapshot(a, { today: '2026-08-09', limit: 15000, startDay: 27 });
+  assert.equal(m.key, '2026-08');
+  assert.equal(m.from, '2026-07-27');
+  assert.equal(m.to, '2026-08-26');
+  assert.equal(m.daysInMonth, 31);
+  assert.equal(m.day, 14, 'التاسع من أغسطس هو الرابع عشر من دورةٍ تبدأ ٢٧');
+
+  // اليوم: حدُّه حصّةُ يومٍ من حدّ الدورة
+  assert.equal(Math.round(m.today.limit), 484);
+  assert.equal(m.today.spent, 700);
+  assert.ok(m.today.pace > 1.4, 'صرفُ اليوم فوق حصّته');
+
+  // الأسبوع: آخر سبعة أيام، وحدُّه سبعُ حصص
+  assert.equal(Math.round(m.week.limit), 3387);
+  assert.equal(m.week.spent, 5200, 'من ٣ إلى ٩ أغسطس');
+
+  assert.equal(m.last.name, 'اليوم', 'آخر عملية في الدورة');
+});
+
+test('تصفّح دورةٍ ماضية يحسبها مكتملةً لا جارية', async () => {
+  const { cycleSnapshot } = await import('../src/analytics.js');
+  const a = {
+    months: [{ key: '2026-07', spend: 9000, income: 20000, byCategory: {} }],
+    spend: { median: 15000 }, list: [],
+  };
+  const m = cycleSnapshot(a, { today: '2026-08-09', limit: 15000, startDay: 27, key: '2026-07' });
+  assert.equal(m.isCurrent, false);
+  assert.equal(m.day, m.daysInMonth, 'الدورة المنقضية مكتملة، فلا تُقاس بوتيرة نصفها');
+  assert.equal(m.spent, 9000);
+  assert.equal(m.today.spent, 0, 'ولا صرفَ «اليوم» في دورةٍ مضت');
+});
+
+test('توقّع الدورة القادمة: المعتاد وما يعرفه المستخدم', async () => {
+  const { forecastNext } = await import('../src/analytics.js');
+  const a = { spend: { median: 12000 } };
+  const f = forecastNext(a, {
+    today: '2026-08-09', limit: 15000, startDay: 27,
+    planned: [
+      { label: 'رسوم دراسية', amount: 4000, cycle: '2026-09' },
+      { label: 'سفر', amount: 2500 },                       // بلا دورة ⇒ للقادمة
+      { label: 'ليست لها', amount: 9999, cycle: '2026-12' },
+    ],
+  });
+  assert.equal(f.key, '2026-09');
+  assert.deepEqual([f.from, f.to], ['2026-08-27', '2026-09-26']);
+  assert.equal(f.usual, 12000);
+  assert.equal(f.extra, 6500, 'يُجمع المخطَّط للدورة القادمة وحدها');
+  assert.equal(f.expected, 18500);
+  assert.equal(f.over, 3500, 'يتجاوز الحدّ بـ٣٥٠٠');
+  assert.equal(Math.round(f.dailyAllowance), 274, 'ما يبقى لكل يومٍ بعد حسم المخطَّط');
 });

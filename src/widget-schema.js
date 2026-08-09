@@ -19,6 +19,9 @@ export const ALLOWED = {
   pace: 'number',
   projected: 'number',
   todaySpent: 'number',
+  dayLimit: 'number',
+  weekSpent: 'number',
+  weekLimit: 'number',
   todayCount: 'number',
   monthCount: 'number',
   top: 'list',            // حتى ثلاثة مجالات: {n, a}

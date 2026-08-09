@@ -3,9 +3,9 @@
 import { db, getSettings, saveSettings, getRules, saveRules, exportAll, importAll, requestPersistence, rememberDeleted, forgetDeleted } from './store.js';
 import { readFileToRows, rowsToTransactions, dedupe, pickStatementSheet } from './import.js';
 import { applyClassification, suggestRule, CATEGORY_MAP, subcategoriesFor } from './classify.js';
-import { analyze, monthSnapshot } from './analytics.js';
+import { analyze, cycleSnapshot, forecastNext } from './analytics.js';
 import { evaluate, planTerms, gapAnalysis, profileFromAnalytics, installmentOf, effectiveAPR } from './affordability.js';
-import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO } from './util.js';
+import { uid, groupBy, money, monthLabel, APP_VERSION, todayISO, shiftCycle } from './util.js';
 import * as Sync from './sync.js';
 import * as Inbox from './inbox.js';
 import { formOf } from './form-ids.js';
@@ -362,12 +362,14 @@ async function reload() {
   state.analysis = state.transactions.length ? analyze(state.transactions, state.settings) : null;
   state.accountsSummary = buildAccountsSummary(state.transactions);
   state.reminders = computeReminders(state.analysis);
-  state.month = state.analysis
-    ? monthSnapshot(state.analysis, {
-      today: todayISO(),
-      limit: +state.settings?.budget?.monthlyLimit || null,
-    })
-    : null;
+  // الدورة المعروضة قد تكون سابقةً يتصفّحها المستخدم، والحسابُ واحد
+  const startDay = Number(state.settings?.budget?.cycleStartDay) || 1;
+  const opts = { today: todayISO(), limit: +state.settings?.budget?.monthlyLimit || null, startDay };
+  state.month = state.analysis ? cycleSnapshot(state.analysis, opts) : null;
+  state.viewCycle = state.analysis && state.cycleKey
+    ? cycleSnapshot(state.analysis, { ...opts, key: state.cycleKey })
+    : state.month;
+  state.forecast = state.analysis ? forecastNext(state.analysis, { ...opts, planned: state.settings?.budget?.planned || [] }) : null;
   publishWidget();
   recompute();
 }
@@ -625,6 +627,36 @@ function bindEvents() {
     if (action === 'widget-copy-script') {
       await navigator.clipboard.writeText(V.scriptableSource(Sync.widgetUrl(state.settings?.widget?.token || '')));
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
+      return;
+    }
+    if (action === 'cycle-prev' || action === 'cycle-next') {
+      const cur = state.viewCycle?.key || state.month?.key;
+      if (!cur) return;
+      const next = shiftCycle(cur, action === 'cycle-prev' ? -1 : 1);
+      // لا تُتجاوَز الدورة الجارية: ما بعدها لم يقع بعد
+      state.cycleKey = next > (state.month?.key || next) ? null : next;
+      await reload();
+      render();
+      return;
+    }
+    if (action === 'plan-add') {
+      const label = (document.getElementById('plan-label')?.value || '').trim().slice(0, 40);
+      const amount = Number(document.getElementById('plan-amount')?.value) || 0;
+      if (!amount) { toast('أدخل مبلغ البند', 'warn'); return; }
+      const planned = [...(state.settings.budget?.planned || []), { id: uid(), label: label || 'بند', amount, cycle: state.forecast?.key }];
+      state.settings = await saveSettings({ budget: { planned } });
+      await reload();
+      toast('أُضيف إلى توقّع الدورة القادمة', 'ok');
+      schedulePush();
+      render();
+      return;
+    }
+    if (action === 'plan-del') {
+      const planned = (state.settings.budget?.planned || []).filter((p) => p.id !== el.dataset.id);
+      state.settings = await saveSettings({ budget: { planned } });
+      await reload();
+      schedulePush();
+      render();
       return;
     }
     if (action === 'tag-open') { state.tagging = el.dataset.id; render(); return; }
@@ -1054,7 +1086,11 @@ async function updateSettings() {
       minBufferMonths: numOr('p-buffer', 3),
       maxTerm: numOr('p-maxTerm', 72),
     },
-    budget: { monthlyLimit: blankOr('b-limit') },
+    budget: {
+      monthlyLimit: blankOr('b-limit'),
+      cycleStartDay: Math.min(28, Math.max(1, numOr('b-start', 1))),
+      planned: state.settings?.budget?.planned || [],
+    },
     analysis: {
       excludeInternal: !!g('a-internal')?.checked,
       excludeReversals: !!g('a-rev')?.checked,

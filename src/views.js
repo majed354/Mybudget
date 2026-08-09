@@ -158,7 +158,55 @@ function paceAr(pace) {
   return `أسرع من حدّك بـ${pct(pace - 1, 0)}`;
 }
 
-function monthCard(m) {
+/**
+ * توقّع الدورة القادمة: المعتاد + ما تعرفه أنت.
+ * المتوسط وحده يكذب على من يعرف أن أمامه رسومًا دراسية أو سفرًا — والتطبيق
+ * لا يعلمه وأنت تعلمه. فالمعرفتان تُجمعان قبل أن تبدأ الدورة لا بعدها.
+ */
+function forecastCard(f) {
+  if (!f) return '';
+  const tight = f.over > 0;
+  return `<details class="card fold" ${tight ? 'open' : ''}>
+    <summary class="card-head"><h2>الدورة القادمة · ${escapeHTML(monthLabel(f.key))}</h2>
+      <span class="hint ${tight ? 'danger-text' : 'pos'}">${tight ? `متوقَّع تجاوز ${money(f.over, { round: true })}` : `متّسع ${money(f.headroom, { round: true })}`}</span>
+    </summary>
+    <div class="card-body">
+      <p class="hint">${escapeHTML(dateLabel(f.from))} — ${escapeHTML(dateLabel(f.to))}</p>
+      <table class="table compact">
+        <tbody>
+          <tr><td>المعتاد (وسيط صرفك)</td><td class="ltr">${money(f.usual, { round: true })}</td></tr>
+          <tr><td>بنودٌ تعرفها أنت</td><td class="ltr">${money(f.extra, { round: true })}</td></tr>
+          <tr><td><strong>الاستهلاك المتوقَّع</strong></td><td class="ltr"><strong>${money(f.expected, { round: true })}</strong></td></tr>
+          <tr><td>الحدّ</td><td class="ltr">${money(f.limit, { round: true })}</td></tr>
+          <tr><td>ما يبقى لكل يوم بعد المخطَّط</td><td class="ltr"><strong>${money(f.dailyAllowance, { round: true })}</strong></td></tr>
+        </tbody>
+      </table>
+      ${f.planned.length ? `<ul class="planned">${f.planned.map((p) => `<li>
+        <span>${escapeHTML(p.label || 'بند')}</span>
+        <span class="ltr">${money(p.amount, { round: true })}</span>
+        <button class="btn tiny danger" data-action="plan-del" data-id="${escapeHTML(p.id)}">حذف</button>
+      </li>`).join('')}</ul>` : '<p class="hint">لا بنود مخطَّطة بعد.</p>'}
+      <div class="row wrap gap mt">
+        <label class="field"><span>بند متوقَّع</span><input id="plan-label" placeholder="مثال: رسوم دراسية"></label>
+        <label class="field"><span>مبلغه</span><input id="plan-amount" type="number" lang="en" step="any" placeholder="4000"></label>
+        <button class="btn primary" data-action="plan-add">أضِفه</button>
+      </div>
+    </div>
+  </details>`;
+}
+
+/** شريطٌ صغير لأفقٍ واحد: اليوم أو الأسبوع. */
+function miniBar(label, h, tone) {
+  const fill = Math.min(100, Math.max(0, h.usedShare * 100));
+  const over = h.remaining < 0;
+  return `<div class="mini-bar">
+    <div class="mb-head"><span>${escapeHTML(label)}</span>
+      <span class="ltr ${over ? 'neg' : ''}">${money(h.spent, { round: true })} <span class="muted">من ${money(h.limit, { round: true })}</span></span></div>
+    <div class="meter sm"><div class="meter-fill ${over ? 'over' : tone}" style="width:${fill}%"></div></div>
+  </div>`;
+}
+
+function monthCard(m, state) {
   if (!m) return '';
   const over = m.remaining < 0;
   const fast = m.pace > 1.05;
@@ -168,9 +216,14 @@ function monthCard(m) {
 
   return `<section class="card month-card ${tone}">
     <div class="card-body">
+      <div class="cycle-nav">
+        <button class="btn tiny" data-action="cycle-prev" title="الدورة السابقة">‹</button>
+        <span>${escapeHTML(monthLabel(m.key))} <span class="muted">${escapeHTML(dateLabel(m.from))} — ${escapeHTML(dateLabel(m.to))}</span></span>
+        <button class="btn tiny" data-action="cycle-next" ${m.isCurrent ? 'disabled' : ''} title="الدورة التالية">›</button>
+      </div>
       <div class="month-head">
         <div>
-          <div class="kpi-label">صُرف هذا الشهر · ${escapeHTML(monthLabel(m.key))}</div>
+          <div class="kpi-label">${m.isCurrent ? 'صُرف هذه الدورة' : 'صُرف في دورة'} · ${escapeHTML(monthLabel(m.key))}</div>
           <div class="month-spent">${money(m.spent, { round: true })}</div>
         </div>
         <div class="month-remain">
@@ -187,6 +240,11 @@ function monthCard(m) {
       <p class="hint">اليوم ${num(m.day)} من ${num(m.daysInMonth)} · استُهلك ${pct(m.usedShare)} من الحدّ
         · ${fast ? `<strong class="warn-text">${paceAr(m.pace)}</strong>` : '<strong class="pos">ضمن الوتيرة</strong>'}
         · بهذه الوتيرة تنهي الشهر عند <strong>${money(m.projected, { round: true })}</strong>${m.overBy > 0 ? ` — بتجاوزٍ قدره ${money(m.overBy, { round: true })}` : ''}</p>
+
+      ${m.isCurrent && m.today && m.week ? `<div class="horizons">
+        ${miniBar('اليوم', m.today, m.today.pace > 1.05 ? 'warn' : 'ok')}
+        ${miniBar('آخر ٧ أيام', m.week, m.week.pace > 1.05 ? 'warn' : 'ok')}
+      </div>` : ''}
 
       <div class="month-grid">
         <div class="mini">
@@ -248,7 +306,8 @@ export function viewDashboard(a, state) {
 
   return `
   <div class="grid">
-    ${monthCard(state.month)}
+    ${monthCard(state.viewCycle || state.month, state)}
+    ${forecastCard(state.forecast)}
 
     ${latest.length ? card('آخر خمس عمليات', txTable(latest, { state }), {
       actions: '<button class="btn tiny" data-action="go-tx">كل العمليات</button>',
@@ -680,6 +739,10 @@ export function viewSettings(state, a) {
       <p class="hint">هو ما تقيس به شهرك: كم صُرف، وكم بقي، وهل وتيرتك أسرع من حدّك.
         اتركه فارغًا ليُشتقّ من وسيط صرفك${a?.spend?.median ? ` — وهو الآن ${money(a.spend.median, { round: true })}` : ''}.</p>
       ${numField('b-limit', 'الحدّ الشهري (ر.س)', s.budget?.monthlyLimit ?? '', 'مُشتقّ من كشوفك')}
+      ${numField('b-start', 'يوم بداية الدورة', s.budget?.cycleStartDay ?? 1)}
+      <p class="hint">من ينزل راتبه يوم ٢٧ يعيش دورةً من ٢٧ إلى ٢٦، وقياسُه بالشهر التقويمي يقطع دورته
+        نصفين: نصفٌ في شهرٍ ونصفٌ في آخر. واضبطه <code>27</code> فتصير دورة أغسطس من ٢٧ يوليو إلى ٢٦ أغسطس.
+        و<code>1</code> يعني الشهر التقويمي كما كان.</p>
     `, { open: true })}
 
     ${foldable('حُرّاس القرار', `
@@ -1011,6 +1074,21 @@ if (!d) {
 
   // «٨/٣١» بين نصٍّ عربي يُقرأ مقلوبًا فيُظنّ اليومَ الحاديَ والثلاثين،
   // و«من» تفصل الرقمين فيبقى كلٌّ في موضعه مهما كان اتجاه السطر.
+  // شريطان أصغر لليوم والأسبوع: الدورة تُطمئن والأسبوع يُنذر واليوم يُقرّر
+  const small = (label, sp, cap) => {
+    if (!(cap > 0)) return;
+    w.addSpacer(4);
+    const st = w.addStack();
+    st.addSpacer();
+    R(st.addText(label + ' ' + money(sp) + ' من ' + money(cap)), 9,
+      sp > cap ? new Color('#dc2626') : Color.gray());
+    w.addImage(barImage(Math.min(1, sp / cap), sp > cap ? new Color('#dc2626') : new Color('#6b7280'), 320, 6))
+      .imageSize = new Size(320, 6);
+  };
+  small('اليوم', d.todaySpent, d.dayLimit);
+  small('آخر ٧ أيام', d.weekSpent, d.weekLimit);
+
+  w.addSpacer(4);
   const pace = w.addStack();
   pace.addSpacer();
   R(pace.addText('اليوم ' + d.day + ' من ' + d.daysInMonth + ' · بهذه الوتيرة ' + money(d.projected)), 10, Color.gray());

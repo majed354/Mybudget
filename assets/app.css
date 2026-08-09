@@ -558,3 +558,20 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 }
 .tag-editor .field { min-width: 140px; }
 .tag .sub, .tag.sub { background: var(--accent-soft); color: var(--accent); }
+
+/* ── آفاق الصرف الثلاثة ونظرة الدورات ────────────────────── */
+.cycle-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: .82rem; font-weight: 600; }
+.cycle-nav .muted { font-weight: 400; font-size: .74rem; }
+.cycle-nav .btn { min-width: 32px; }
+.horizons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.mini-bar { background: var(--surface-2); border-radius: 11px; padding: 9px 11px; }
+.mb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .76rem; margin-bottom: 6px; }
+.mb-head .ltr { font-variant-numeric: tabular-nums; font-weight: 700; }
+.meter.sm { height: 7px; margin: 0; }
+.meter-fill.ok { background: var(--ok); }
+.meter-fill.warn { background: var(--warn); }
+.meter-fill.over { background: var(--danger); }
+.planned { list-style: none; margin: 8px 0 0; padding: 0; }
+.planned li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
+.planned li .ltr { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) { .horizons { grid-template-columns: 1fr; } }

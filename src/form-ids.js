@@ -21,6 +21,7 @@ export const SETTINGS_RE = /^(p|a|m|b)-/;
 export const STANDALONE_IDS = new Set([
   'file-input', 'acc-name', 'pdf-pass', 'gate-code', 'paste-text',
   'tag-cat', 'tag-sub', 'tag-exclude',   // محرّر التصنيف: يُقرأ عند الحفظ لا عند التغيير
+  'plan-label', 'plan-amount',           // بنود الدورة القادمة: تُقرأ عند الإضافة
 ]);
 
 export function formOf(id) {

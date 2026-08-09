@@ -1,7 +1,7 @@
 // أدوات مشتركة: تنسيق، أرقام عربية، إحصاء وصفي.
 
 /** رقم النسخة — يظهر في الإعدادات ليُعرف أي شيفرة تعمل فعلًا على الجهاز. */
-export const APP_VERSION = '1.19.0';
+export const APP_VERSION = '1.20.0';
 
 export const AR_DIGITS = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9', '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9' };
 
@@ -205,4 +205,57 @@ export function hashTx(t, occ = 0) {
 
 export function escapeHTML(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── دورة الميزانية ────────────────────────────────────────────────────────
+/**
+ * شهرُك المالي قد لا يبدأ أوّل الشهر التقويمي.
+ *
+ * من ينزل راتبه يوم ٢٧ يعيش دورةً من ٢٧ إلى ٢٦، وقياسُ صرفه بالشهر
+ * التقويمي يقطع دورته نصفين: نصفٌ في شهرٍ ونصفٌ في آخر، فلا يُرى حدٌّ
+ * مستهلَكًا ولا فائضٌ متبقٍّ على حقيقته.
+ *
+ * والدورة تُسمّى بالشهر الذي تنتهي فيه: ما بدأ ٢٧ يوليو دورةُ أغسطس، لأن
+ * راتب أغسطس هو الذي يُنفق فيها.
+ */
+const pad = (n) => String(n).padStart(2, '0');
+
+export function cycleKey(isoDate, startDay = 1) {
+  const [y, m, d] = String(isoDate).split('-').map(Number);
+  if (!(startDay > 1) || d < startDay) return `${y}-${pad(m)}`;
+  return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+}
+
+/** حدّا الدورة: أوّل يومٍ فيها وآخره. */
+export function cycleBounds(key, startDay = 1) {
+  const [y, m] = String(key).split('-').map(Number);
+  if (!(startDay > 1)) {
+    return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(new Date(Date.UTC(y, m, 0)).getUTCDate())}` };
+  }
+  const py = m === 1 ? y - 1 : y;
+  const pm = m === 1 ? 12 : m - 1;
+  // آخر يومٍ في الدورة = ما قبل بدايةِ التالية. ويُقصّ اليوم إلى آخر أيام
+  // الشهر متى لم يبلغه: من دورته تبدأ ٣١ لا يجد ٣١ في فبراير.
+  const startThis = Math.min(startDay, new Date(Date.UTC(y, m, 0)).getUTCDate());
+  const startPrev = Math.min(startDay, new Date(Date.UTC(py, pm, 0)).getUTCDate());
+  const to = new Date(Date.UTC(y, m - 1, startThis - 1));
+  return {
+    from: `${py}-${pad(pm)}-${pad(startPrev)}`,
+    to: `${to.getUTCFullYear()}-${pad(to.getUTCMonth() + 1)}-${pad(to.getUTCDate())}`,
+  };
+}
+
+/** عدد أيام الدورة، وكم مضى منها حتى تاريخٍ ما. */
+export function cycleProgress(key, startDay, today) {
+  const { from, to } = cycleBounds(key, startDay);
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  const elapsed = Math.min(days, Math.max(1, Math.round((Date.parse(today) - Date.parse(from)) / 86400000) + 1));
+  return { from, to, days, elapsed };
+}
+
+/** الدورة التالية أو السابقة. */
+export function shiftCycle(key, by) {
+  const [y, m] = String(key).split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + by, 1));
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}`;
 }

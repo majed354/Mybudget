@@ -1,6 +1,15 @@
 // محرّك التحليل: من قائمة عمليات خام إلى صورة إنفاق قابلة لاتخاذ القرار.
 
-import { monthKey, median, percentile, mean, cv, trendSlope, groupBy, sum } from './util.js';
+import { monthKey, cycleKey, cycleBounds, cycleProgress, median, percentile, mean, cv, trendSlope, groupBy, sum } from './util.js';
+
+/**
+ * دورة الميزانية بدل الشهر التقويمي.
+ * من ينزل راتبه يوم ٢٧ يعيش دورةً من ٢٧ إلى ٢٦، وقياسُه بالشهر التقويمي
+ * يقطع دورته نصفين. ويُمرَّر اليومُ إلى كل تجميعٍ زمنيّ هنا، فلا تختلف
+ * الأشهر بين موضعٍ وآخر — واختلافُها يجعل المجاميع لا تتّسق.
+ */
+let CYCLE_START = 1;
+const ck = (d) => cycleKey(d, CYCLE_START);
 import { CATEGORY_MAP, GROUP_OF, ESSENTIAL_GROUPS, FLEX_GROUPS, TYPES } from './classify.js';
 
 // ── وسم العمليات التي يجب ألّا تُحسب إنفاقًا حقيقيًا ────────────────────────
@@ -94,7 +103,7 @@ function daysApart(a, b) {
 }
 
 function monthlyTotals(list) {
-  const g = groupBy(list, (t) => monthKey(t.date));
+  const g = groupBy(list, (t) => ck(t.date));
   return [...g.entries()].sort().map(([key, rows]) => ({
     key,
     spend: sum(rows.filter((t) => t.amount < 0).map((t) => -t.amount)),
@@ -114,7 +123,7 @@ export function findRecurring(list) {
   const out = [];
   for (const [key, rows] of groups) {
     if (rows.length < 3) continue;
-    const months = new Set(rows.map((t) => monthKey(t.date)));
+    const months = new Set(rows.map((t) => ck(t.date)));
     if (months.size < 3) continue;
     const amounts = rows.map((t) => Math.abs(t.amount));
     const variation = cv(amounts);
@@ -146,14 +155,14 @@ export function analyzeIncome(list) {
   const groups = groupBy(credits.filter((t) => t.type !== 'salary'), (t) => `${t.type}:${Math.round(t.amount / 100)}`);
   const recurringOther = [];
   for (const [, rows] of groups) {
-    const months = new Set(rows.map((t) => monthKey(t.date)));
+    const months = new Set(rows.map((t) => ck(t.date)));
     if (months.size >= 3 && cv(rows.map((t) => t.amount)) < 0.15) recurringOther.push(...rows);
   }
   const recurring = [...salaryTx, ...recurringOther];
   const recurringIds = new Set(recurring.map((t) => t.id));
   const oneOff = credits.filter((t) => !recurringIds.has(t.id));
 
-  const byMonth = groupBy(recurring, (t) => monthKey(t.date));
+  const byMonth = groupBy(recurring, (t) => ck(t.date));
   const monthly = [...byMonth.entries()].sort().map(([k, rows]) => ({ key: k, amount: sum(rows.map((t) => t.amount)) }));
   const values = monthly.map((m) => m.amount);
 
@@ -176,12 +185,13 @@ export function analyzeIncome(list) {
 // ── التحليل الشامل ────────────────────────────────────────────────────────
 
 export function analyze(transactions, settings = {}) {
+  CYCLE_START = Number(settings?.budget?.cycleStartDay) || 1;
   const list = transactions.slice();
   markExclusions(list, settings);
 
   const active = list.filter((t) => !t.excluded);
   const spendTx = active.filter((t) => t.amount < 0);
-  const monthsMap = groupBy(active, (t) => monthKey(t.date));
+  const monthsMap = groupBy(active, (t) => ck(t.date));
   let monthKeys = [...monthsMap.keys()].sort();
 
   // شهر الطرف الناقص يشوّه المتوسط، فنستبعده من الحسابات (لا من العرض)
@@ -229,7 +239,7 @@ export function analyze(transactions, settings = {}) {
     const e = catTotals.get(c);
     e.total += -t.amount;
     e.count++;
-    const mk = monthKey(t.date);
+    const mk = ck(t.date);
     e.monthly.set(mk, (e.monthly.get(mk) || 0) - t.amount);
   }
   const totalSpend = sum([...catTotals.values()].map((c) => c.total)) || 1;
@@ -282,7 +292,7 @@ export function analyze(transactions, settings = {}) {
   const loanByMonth = new Map();
   for (const t of active) {
     if (t.type !== 'loan' || t.amount >= 0) continue;
-    const k = monthKey(t.date);
+    const k = ck(t.date);
     loanByMonth.set(k, (loanByMonth.get(k) || 0) - t.amount);
   }
   const recentKeys = solid.slice(-3).map((m) => m.key);
@@ -412,26 +422,31 @@ export function latestBalances(transactions) {
  *
  * والحدّ إن لم يُحدَّد يُشتقّ من وسيط صرفك، فيبدأ العدّاد ذا معنى من أول يوم.
  */
-export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
+/**
+ * صورة الدورة: ما صُرف منها، وكم بقي من الحدّ، وكم وُفِّر، وأين ذهب أكثره —
+ * بثلاثة آفاق: الدورة، والأسبوع، واليوم.
+ *
+ * ولكل أفقٍ حدُّه مشتقًّا من حدّ الدورة بنسبة أيامه، فمن حدُّه ١٥ ألفًا في
+ * ٣١ يومًا فحدّه اليومي ٤٨٤ والأسبوعي ٣٬٣٨٧. وثلاثتها تُقاس بالوتيرة لا
+ * بالرصيد: من صرف نصف حدّه في ثلث دورته لم يبقَ له نصف، بل تجاوز.
+ *
+ * و`key` يسمح بتصفّح الدورات الماضية بالحساب نفسه، فلا يُكتب حسابان.
+ */
+export function cycleSnapshot(a, { today, limit = null, startDay = 1, key = null, topN = 5 } = {}) {
   if (!a || !a.months?.length) return null;
-  const day = Number(today.slice(8, 10));
-  const key = today.slice(0, 7);
-  const daysInMonth = new Date(Date.UTC(+key.slice(0, 4), +key.slice(5, 7), 0)).getUTCDate();
+  const cycle = key || cycleKey(today, startDay);
+  const { from, to, days, elapsed } = cycleProgress(cycle, startDay, today);
+  const isCurrent = cycle === cycleKey(today, startDay);
+  const day = isCurrent ? elapsed : days;   // الدورة المنقضية مكتملة
 
-  const m = a.months.find((x) => x.key === key);
+  const m = a.months.find((x) => x.key === cycle);
   const spent = m?.spend || 0;
   const income = m?.income || 0;
 
   const cap = limit > 0 ? limit : (a.spend?.median || 0);
-  const expectedByNow = cap * (day / daysInMonth);
+  const expectedByNow = cap * (day / days);
   const pace = expectedByNow > 0 ? spent / expectedByNow : 0;
-  const projected = day > 0 ? spent * (daysInMonth / day) : 0;
-
-  // صرفُ اليوم وآخر عملية: هذا ما يُسأل عنه في اللحظة — «هل سُجّل شراؤي؟»
-  // و«كم صرفتُ اليوم؟» — ولا يجيبه متوسطُ شهرٍ ولا وسيطُ سنة.
-  const spendRows = (a.list || []).filter((t) => !t.excluded && t.amount < 0);
-  const todayRows = spendRows.filter((t) => t.date === today);
-  const lastRow = spendRows.slice().sort((x, y) => (x.date === y.date ? (x.seq || 0) - (y.seq || 0) : x.date.localeCompare(y.date))).pop();
+  const projected = day > 0 ? spent * (days / day) : 0;
 
   const byCat = m?.byCategory || {};
   const totalCat = Object.values(byCat).reduce((s, v) => s + v, 0);
@@ -440,8 +455,23 @@ export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
     .sort((x, y) => y.amount - x.amount)
     .slice(0, topN);
 
+  // اليوم والأسبوع يُحسبان من العمليات نفسها لا من مجاميع الدورة
+  const rows = (a.list || []).filter((t) => !t.excluded && t.amount < 0);
+  const spentBetween = (f, t2) => rows.filter((r) => r.date >= f && r.date <= t2).reduce((s, r) => s - r.amount, 0);
+  const weekFrom = new Date(Date.parse(today) - 6 * 86400000).toISOString().slice(0, 10);
+  const dailyCap = cap / days;
+
+  const horizon = (spentIn, capIn, elapsedIn, totalIn) => {
+    const expected = capIn * (elapsedIn / totalIn);
+    return {
+      spent: spentIn, limit: capIn, remaining: capIn - spentIn,
+      usedShare: capIn > 0 ? spentIn / capIn : 0,
+      pace: expected > 0 ? spentIn / expected : 0,
+    };
+  };
+
   return {
-    key, day, daysInMonth,
+    key: cycle, from, to, day, daysInMonth: days, isCurrent,
     spent, income,
     saved: income - spent,
     savedShare: income > 0 ? (income - spent) / income : null,
@@ -453,15 +483,52 @@ export function monthSnapshot(a, { today, limit = null, topN = 5 } = {}) {
     projected,
     overBy: projected > cap ? projected - cap : 0,
     top,
-    todaySpent: todayRows.reduce((s, t) => s - t.amount, 0),
-    todayCount: todayRows.length,
-    monthCount: (a.list || []).filter((t) => !t.excluded && t.amount < 0 && monthKey(t.date) === key).length,
-    last: lastRow ? {
-      // اسم التاجر إن عُرف، وإلا فالمجال — ولا يُلقى نصّ الكشف الخام في أداةٍ
-      // عرضُها بضعة أحرف، فيخرج سطرًا مبتورًا لا يُفهم
-      name: lastRow.merchant || CATEGORY_MAP[lastRow.category]?.ar || 'عملية',
-      amount: -lastRow.amount,
-      date: lastRow.date,
-    } : null,
+    // ثلاثة آفاق، لكلٍّ شريطه
+    today: horizon(isCurrent ? spentBetween(today, today) : 0, dailyCap, 1, 1),
+    week: horizon(isCurrent ? spentBetween(weekFrom > from ? weekFrom : from, today) : 0, dailyCap * 7, 7, 7),
+    todaySpent: isCurrent ? spentBetween(today, today) : 0,
+    todayCount: isCurrent ? rows.filter((r) => r.date === today).length : 0,
+    monthCount: rows.filter((r) => r.date >= from && r.date <= to).length,
+    last: (() => {
+      const l = rows.filter((r) => r.date >= from && r.date <= to).sort((x, y) => y.date.localeCompare(x.date))[0];
+      return l ? { name: l.merchant || CATEGORY_MAP[l.category]?.ar || 'عملية', amount: -l.amount, date: l.date } : null;
+    })(),
+  };
+}
+
+
+/**
+ * توقّع الدورة القادمة: المعتاد + ما تعرفه أنت.
+ *
+ * المتوسط وحده يكذب على من يعرف أن أمامه مصروفًا استثنائيًّا — رسومًا
+ * دراسية أو سفرًا أو صيانة. والتطبيق لا يعلمه، والمستخدم يعلمه. فيُجمع
+ * ما يعرفه المحرّك (وسيط الصرف) إلى ما يُدخله المستخدم من بنودٍ مخطَّطة،
+ * فيخرج استهلاكٌ تقريبيّ يُقارَن بالحدّ قبل أن تبدأ الدورة لا بعدها.
+ */
+export function forecastNext(a, { today, limit = null, startDay = 1, planned = [] } = {}) {
+  if (!a) return null;
+  const current = cycleKey(today, startDay);
+  const [y, m] = current.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  const { from, to } = cycleBounds(next, startDay);
+
+  const usual = a.spend?.median || 0;
+  const cap = limit > 0 ? limit : usual;
+  const mine = planned.filter((p) => !p.cycle || p.cycle === next);
+  const extra = mine.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const expected = usual + extra;
+
+  return {
+    key: next, from, to,
+    usual, extra, expected,
+    limit: cap,
+    over: expected > cap ? expected - cap : 0,
+    headroom: cap - expected,
+    planned: mine,
+    // ما يبقى لكل يومٍ بعد حسم المخطَّط، وهو الرقم الذي يُقرَّر به فعلًا
+    dailyAllowance: (() => {
+      const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+      return days > 0 ? Math.max(0, cap - extra) / days : 0;
+    })(),
   };
 }
