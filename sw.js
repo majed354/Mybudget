@@ -1,6 +1,6 @@
 // عامل الخدمة: يجعل التطبيق يفتح دون إنترنت، ويعرض التنبيهات.
 
-const CACHE = 'mybudget-v24';
+const CACHE = 'mybudget-v25';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './assets/app.css',

@@ -255,12 +255,12 @@ function monthCard(m, state) {
 
       ${m.isCurrent && m.today && m.week ? `<div class="horizons">
         ${miniBar('اليوم', m.today, m.today.pace > 1.05 ? 'warn' : 'ok')}
-        ${miniBar(`الأسبوع ${num(m.week.index || 1)}`, m.week, m.week.pace > 1.05 ? 'warn' : 'ok')}
+        ${miniBar(`الربع ${num(m.week.index || 1)}`, m.week, m.week.pace > 1.05 ? 'warn' : 'ok')}
       </div>` : ''}
 
-      ${m.weeks?.length ? `<h3>أسابيع الدورة</h3>
+      ${m.weeks?.length ? `<h3>أرباع الدورة</h3>
       <ul class="weeks">${m.weeks.map((w) => `<li class="${w.isCurrent ? 'now' : w.isPast ? 'past' : 'future'}">
-        <span class="wk-no">${w.isCurrent ? '◆' : w.isPast ? mark(w.over, w.spent / w.limit) : '○'} الأسبوع ${num(w.i)}</span>
+        <span class="wk-no">${w.isCurrent ? '◆' : w.isPast ? mark(w.over, w.spent / w.limit) : '○'} الربع ${num(w.i)}</span>
         <span class="wk-days">${escapeHTML(dateLabel(w.from).slice(0, 5))} — ${escapeHTML(dateLabel(w.to).slice(0, 5))}</span>
         <span class="meter sm"><span class="meter-fill ${w.over ? 'over' : w.isPast || w.isCurrent ? 'ok' : 'idle'}"
           style="width:${Math.min(100, Math.max(0, w.usedShare * 100))}%"></span></span>
@@ -1113,7 +1113,7 @@ if (!d) {
     w.addImage(barImage(Math.min(1, share), col, 320, 6)).imageSize = new Size(320, 6);
   };
   small('اليوم', d.todaySpent, d.dayLimit);
-  small('الأسبوع', d.weekSpent, d.weekLimit);
+  small('الربع', d.weekSpent, d.weekLimit);
 
   w.addSpacer(4);
   const pace = w.addStack();

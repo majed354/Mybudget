@@ -713,3 +713,34 @@ test('الدورة تُقسم أربعة أسابيع بلا بقيّة، ولك
   assert.equal(m.weeks[0].isPast, true);
   assert.equal(m.week.index, 2, 'و«الأسبوع» هو الجاري لا سبعةٌ متدحرجة');
 });
+
+test('توزيعة الأرباع مثبَّتة لكل شهور السنة، والكبيسة معها', async () => {
+  const { cycleSnapshot } = await import('../src/analytics.js');
+  const a = { months: [{ key: 'x', spend: 0, income: 0, byCategory: {} }], spend: { median: 12000 }, list: [] };
+  const split = (key) => cycleSnapshot(a, { today: '2026-08-09', limit: 12000, startDay: 27, key })
+    .weeks.map((w) => w.days).join('·');
+
+  // دورةٌ تُسمّى بشهرها وتبدأ ٢٧ من سابقه، فطولها طولُ الشهر السابق
+  const expected2026 = {
+    '2026-01': '8·8·8·7', '2026-02': '8·8·8·7', '2026-03': '7·7·7·7', '2026-04': '8·8·8·7',
+    '2026-05': '8·8·7·7', '2026-06': '8·8·8·7', '2026-07': '8·8·7·7', '2026-08': '8·8·8·7',
+    '2026-09': '8·8·8·7', '2026-10': '8·8·7·7', '2026-11': '8·8·8·7', '2026-12': '8·8·7·7',
+  };
+  for (const [key, want] of Object.entries(expected2026)) assert.equal(split(key), want, key);
+
+  // فبراير الكبيسة تُطيل دورة مارس يومًا: ٢٨ ⇒ ٢٩
+  assert.equal(split('2026-03'), '7·7·7·7', 'فبراير ٢٦ فيه ٢٨ يومًا');
+  assert.equal(split('2028-03'), '8·7·7·7', 'وفبراير ٢٨ فيه ٢٩');
+
+  // ولا يومَ يسقط ولا يومَ يُحسب مرتين: مجموع الأرباع = طول الدورة، وحدودها متلاصقة
+  for (const key of Object.keys(expected2026)) {
+    const m = cycleSnapshot(a, { today: '2026-08-09', limit: 12000, startDay: 27, key });
+    assert.equal(m.weeks.reduce((s, w) => s + w.days, 0), m.daysInMonth, `مجموع أرباع ${key}`);
+    assert.equal(m.weeks[0].from, m.from, `أوّل ربعٍ يبدأ ببداية ${key}`);
+    assert.equal(m.weeks[3].to, m.to, `وآخرُه ينتهي بنهايتها`);
+    for (let i = 1; i < 4; i++) {
+      const gap = (Date.parse(m.weeks[i].from) - Date.parse(m.weeks[i - 1].to)) / 86400000;
+      assert.equal(gap, 1, `لا فجوة ولا تداخل بين ربعَي ${key}`);
+    }
+  }
+});
