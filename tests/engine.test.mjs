@@ -648,9 +648,11 @@ test('صورة الدورة على بدايةٍ مخصَّصة، بثلاثة آ
   assert.equal(m.today.spent, 700);
   assert.ok(m.today.pace > 1.4, 'صرفُ اليوم فوق حصّته');
 
-  // الأسبوع: آخر سبعة أيام، وحدُّه سبعُ حصص
-  assert.equal(Math.round(m.week.limit), 3387);
-  assert.equal(m.week.spent, 5200, 'من ٣ إلى ٩ أغسطس');
+  // الأسبوع: كتلةُ الدورة الجارية (٨ أيام هنا)، لا سبعةٌ متدحرجة —
+  // فالمتدحرج يخلط آخر أسبوعٍ بأوّل الذي بعده فلا يُقارَن أسبوعٌ بأسبوع
+  assert.equal(m.week.index, 2);
+  assert.equal(Math.round(m.week.limit), 3871);
+  assert.equal(m.week.spent, 5200, 'من ٤ إلى ١١ أغسطس، وقد وقع فيها ٣٠٠٠ و١٥٠٠ و٧٠٠');
 
   assert.equal(m.last.name, 'اليوم', 'آخر عملية في الدورة');
 });
@@ -686,4 +688,28 @@ test('توقّع الدورة القادمة: المعتاد وما يعرفه �
   assert.equal(f.expected, 18500);
   assert.equal(f.over, 3500, 'يتجاوز الحدّ بـ٣٥٠٠');
   assert.equal(Math.round(f.dailyAllowance), 274, 'ما يبقى لكل يومٍ بعد حسم المخطَّط');
+});
+
+test('الدورة تُقسم أربعة أسابيع بلا بقيّة، ولكلٍّ حدُّه بنسبة أيامه', async () => {
+  const { cycleSnapshot } = await import('../src/analytics.js');
+  const a = {
+    months: [{ key: '2026-08', spend: 4000, income: 0, byCategory: {} }],
+    spend: { median: 15000 },
+    list: [
+      { date: '2026-07-28', amount: -1000, excluded: false },   // الأسبوع ١
+      { date: '2026-08-06', amount: -2000, excluded: false },   // الأسبوع ٢
+      { date: '2026-08-09', amount: -1000, excluded: false },   // الأسبوع ٢
+    ],
+  };
+  const m = cycleSnapshot(a, { today: '2026-08-09', limit: 15000, startDay: 27 });
+  assert.equal(m.weeks.length, 4);
+  assert.deepEqual(m.weeks.map((w) => w.days), [8, 8, 8, 7], '٣١ يومًا ⇒ ٨ ٨ ٨ ٧');
+  assert.equal(m.weeks[0].from, '2026-07-27');
+  assert.equal(m.weeks[3].to, '2026-08-26', 'وآخرها ينتهي بآخر الدورة');
+  assert.equal(m.weeks[0].spent, 1000);
+  assert.equal(m.weeks[1].spent, 3000);
+  assert.equal(Math.round(m.weeks[0].limit), 3871, 'حدُّه بنسبة أيامه من الدورة');
+  assert.equal(m.weeks[1].isCurrent, true, 'التاسع من أغسطس في الأسبوع الثاني');
+  assert.equal(m.weeks[0].isPast, true);
+  assert.equal(m.week.index, 2, 'و«الأسبوع» هو الجاري لا سبعةٌ متدحرجة');
 });

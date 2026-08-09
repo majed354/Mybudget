@@ -195,12 +195,24 @@ function forecastCard(f) {
   </details>`;
 }
 
+/**
+ * علامةٌ على الحال: التشجيع يُبقي المستخدم على العادة، والرقم وحده أصمّ.
+ * ولا تُمنح إلا على ما انقضى أو على وتيرةٍ حقيقية — فمدحٌ في أول اليوم
+ * على صرفٍ لم يقع بعدُ يفقد معناه سريعًا.
+ */
+function mark(over, pace) {
+  if (over) return '<span class="mk bad" title="تجاوزتَ الحدّ">✕</span>';
+  if (pace > 1.05) return '<span class="mk warn" title="أسرع من وتيرتك">▲</span>';
+  if (pace < 0.85) return '<span class="mk good" title="أبطأ من وتيرتك — أحسنت">✓</span>';
+  return '<span class="mk ok" title="ضمن الوتيرة">●</span>';
+}
+
 /** شريطٌ صغير لأفقٍ واحد: اليوم أو الأسبوع. */
 function miniBar(label, h, tone) {
   const fill = Math.min(100, Math.max(0, h.usedShare * 100));
   const over = h.remaining < 0;
   return `<div class="mini-bar">
-    <div class="mb-head"><span>${escapeHTML(label)}</span>
+    <div class="mb-head"><span>${mark(h.remaining < 0, h.pace)} ${escapeHTML(label)}</span>
       <span class="ltr ${over ? 'neg' : ''}">${money(h.spent, { round: true })} <span class="muted">من ${money(h.limit, { round: true })}</span></span></div>
     <div class="meter sm"><div class="meter-fill ${over ? 'over' : tone}" style="width:${fill}%"></div></div>
   </div>`;
@@ -243,8 +255,18 @@ function monthCard(m, state) {
 
       ${m.isCurrent && m.today && m.week ? `<div class="horizons">
         ${miniBar('اليوم', m.today, m.today.pace > 1.05 ? 'warn' : 'ok')}
-        ${miniBar('آخر ٧ أيام', m.week, m.week.pace > 1.05 ? 'warn' : 'ok')}
+        ${miniBar(`الأسبوع ${num(m.week.index || 1)}`, m.week, m.week.pace > 1.05 ? 'warn' : 'ok')}
       </div>` : ''}
+
+      ${m.weeks?.length ? `<h3>أسابيع الدورة</h3>
+      <ul class="weeks">${m.weeks.map((w) => `<li class="${w.isCurrent ? 'now' : w.isPast ? 'past' : 'future'}">
+        <span class="wk-no">${w.isCurrent ? '◆' : w.isPast ? mark(w.over, w.spent / w.limit) : '○'} الأسبوع ${num(w.i)}</span>
+        <span class="wk-days">${escapeHTML(dateLabel(w.from).slice(0, 5))} — ${escapeHTML(dateLabel(w.to).slice(0, 5))}</span>
+        <span class="meter sm"><span class="meter-fill ${w.over ? 'over' : w.isPast || w.isCurrent ? 'ok' : 'idle'}"
+          style="width:${Math.min(100, Math.max(0, w.usedShare * 100))}%"></span></span>
+        <span class="wk-amount ltr ${w.over ? 'neg' : ''}">${money(w.spent, { round: true })}</span>
+        <span class="wk-cap ltr muted">${money(w.limit, { round: true })}</span>
+      </li>`).join('')}</ul>` : ''}
 
       <div class="month-grid">
         <div class="mini">
@@ -1065,7 +1087,8 @@ if (!d) {
 
   const rem = w.addStack();
   rem.addSpacer();
-  R(rem.addText((over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit)), 12, accent, true);
+  const cycleSign = over ? '✕' : fast ? '▲' : d.pace < 0.85 ? '✓' : '●';
+  R(rem.addText(cycleSign + ' ' + (over ? 'تجاوزتَ الحدّ بـ' : 'بقي ') + money(Math.abs(d.remaining)) + ' من ' + money(d.limit)), 12, accent, true);
 
   w.addSpacer(6);
   const share = d.limit > 0 ? Math.max(0, Math.min(1, d.spent / d.limit)) : 0;
@@ -1075,18 +1098,22 @@ if (!d) {
   // «٨/٣١» بين نصٍّ عربي يُقرأ مقلوبًا فيُظنّ اليومَ الحاديَ والثلاثين،
   // و«من» تفصل الرقمين فيبقى كلٌّ في موضعه مهما كان اتجاه السطر.
   // شريطان أصغر لليوم والأسبوع: الدورة تُطمئن والأسبوع يُنذر واليوم يُقرّر
+  const OK = new Color('#059669'), WARN = new Color('#d97706'), BAD = new Color('#dc2626');
   const small = (label, sp, cap) => {
     if (!(cap > 0)) return;
-    w.addSpacer(4);
+    const over = sp > cap;
+    const share = sp / cap;
+    // علامةٌ تُشجّع أو تُنذر: الرقم وحده أصمّ، والعلامة تُبقي على العادة
+    const sign = over ? '✕' : share > 0.9 ? '▲' : share < 0.6 ? '✓' : '●';
+    const col = over ? BAD : share > 0.9 ? WARN : OK;
+    w.addSpacer(5);
     const st = w.addStack();
     st.addSpacer();
-    R(st.addText(label + ' ' + money(sp) + ' من ' + money(cap)), 9,
-      sp > cap ? new Color('#dc2626') : Color.gray());
-    w.addImage(barImage(Math.min(1, sp / cap), sp > cap ? new Color('#dc2626') : new Color('#6b7280'), 320, 6))
-      .imageSize = new Size(320, 6);
+    R(st.addText(sign + ' ' + label + ' ' + money(sp) + ' من ' + money(cap)), 10, col, true);
+    w.addImage(barImage(Math.min(1, share), col, 320, 6)).imageSize = new Size(320, 6);
   };
   small('اليوم', d.todaySpent, d.dayLimit);
-  small('آخر ٧ أيام', d.weekSpent, d.weekLimit);
+  small('الأسبوع', d.weekSpent, d.weekLimit);
 
   w.addSpacer(4);
   const pace = w.addStack();

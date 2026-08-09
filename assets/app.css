@@ -575,3 +575,26 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .planned li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
 .planned li .ltr { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
 @media (max-width: 380px) { .horizons { grid-template-columns: 1fr; } }
+
+/* ── أسابيع الدورة وعلامات الحال ──────────────────────────── */
+.mk { font-weight: 700; font-size: .82em; }
+.mk.good { color: var(--ok); }
+.mk.ok { color: var(--muted); }
+.mk.warn { color: var(--warn); }
+.mk.bad { color: var(--danger); }
+.weeks { list-style: none; margin: 6px 0 0; padding: 0; }
+.weeks li {
+  display: grid; grid-template-columns: minmax(5.5rem, auto) auto 1fr auto auto;
+  gap: 8px; align-items: center; padding: 6px 0; font-size: .8rem;
+}
+.weeks li.future { opacity: .5; }
+.weeks li.now { font-weight: 700; }
+.wk-days { color: var(--muted); font-size: .72rem; direction: ltr; white-space: nowrap; }
+.weeks .meter.sm { display: block; height: 6px; }
+.meter-fill.idle { background: var(--line); }
+.wk-amount, .wk-cap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wk-cap { font-size: .72rem; }
+@media (max-width: 420px) {
+  .weeks li { grid-template-columns: minmax(4.6rem, auto) 1fr auto; }
+  .wk-days, .wk-cap { display: none; }
+}

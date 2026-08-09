@@ -461,6 +461,33 @@ export function cycleSnapshot(a, { today, limit = null, startDay = 1, key = null
   const weekFrom = new Date(Date.parse(today) - 6 * 86400000).toISOString().slice(0, 10);
   const dailyCap = cap / days;
 
+  /**
+   * أسابيع الدورة أربعة، لا سبعةُ أيامٍ متدحرجة.
+   * المتدحرج يخلط آخر الأسبوع بأوّل الذي بعده فلا يُقارَن أسبوعٌ بأسبوع.
+   * والأربعة تقسم الدورة كلها بلا بقيّة: ٣١ يومًا ⇒ ٨ ٨ ٨ ٧ — يزيد يومٌ
+   * أو ينقص، وذلك أهون من كسرٍ لا يُحصى به.
+   */
+  const base = Math.floor(days / 4);
+  const extra = days - base * 4;
+  const weeks = [];
+  let cursor = 0;
+  for (let i = 0; i < 4; i++) {
+    const len = base + (i < extra ? 1 : 0);
+    const wFrom = new Date(Date.parse(from) + cursor * 86400000).toISOString().slice(0, 10);
+    const wTo = new Date(Date.parse(from) + (cursor + len - 1) * 86400000).toISOString().slice(0, 10);
+    const wSpent = spentBetween(wFrom, wTo);
+    const wCap = cap * (len / days);
+    weeks.push({
+      i: i + 1, from: wFrom, to: wTo, days: len,
+      spent: wSpent, limit: wCap, remaining: wCap - wSpent,
+      usedShare: wCap > 0 ? wSpent / wCap : 0,
+      over: wSpent > wCap,
+      isCurrent: isCurrent && today >= wFrom && today <= wTo,
+      isPast: today > wTo,
+    });
+    cursor += len;
+  }
+
   const horizon = (spentIn, capIn, elapsedIn, totalIn) => {
     const expected = capIn * (elapsedIn / totalIn);
     return {
@@ -485,7 +512,13 @@ export function cycleSnapshot(a, { today, limit = null, startDay = 1, key = null
     top,
     // ثلاثة آفاق، لكلٍّ شريطه
     today: horizon(isCurrent ? spentBetween(today, today) : 0, dailyCap, 1, 1),
-    week: horizon(isCurrent ? spentBetween(weekFrom > from ? weekFrom : from, today) : 0, dailyCap * 7, 7, 7),
+    weeks,
+    // «الأسبوع» هو أسبوع الدورة الجاري — لا سبعةٌ متدحرجة، ليُقارَن بنظائره
+    week: (() => {
+      const w = weeks.find((x) => x.isCurrent) || weeks[weeks.length - 1];
+      const elapsedIn = isCurrent ? Math.max(1, Math.round((Date.parse(today) - Date.parse(w.from)) / 86400000) + 1) : w.days;
+      return { ...horizon(w.spent, w.limit, elapsedIn, w.days), index: w.i, from: w.from, to: w.to };
+    })(),
     todaySpent: isCurrent ? spentBetween(today, today) : 0,
     todayCount: isCurrent ? rows.filter((r) => r.date === today).length : 0,
     monthCount: rows.filter((r) => r.date >= from && r.date <= to).length,
