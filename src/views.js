@@ -1165,7 +1165,7 @@ if (!d) {
   const cols = w.addStack();
   cols.layoutHorizontally();
 
-  const col = (label, value, sp, cap, color) => {
+  const col = (label, value, sp, cap, color, foot) => {
     const c = cols.addStack();
     c.layoutVertically();
     c.size = new Size(92, 0);
@@ -1175,14 +1175,20 @@ if (!d) {
     T(l, (hasBar ? sign(sh) + ' ' : '') + label, 9, DIM);
     const v = c.addStack(); v.addSpacer();
     T(v, value, 13, color || (hasBar ? tone(sh) : null), true);
+    // ثالثُ الصفوف: شريطٌ حيث ثمّ سقف، وسندٌ حيث لا سقف — فتستوي الأعمدة
     if (hasBar) {
       c.addSpacer(3);
       c.addImage(bar(92, 5, Math.min(1, sh), tone(sh))).imageSize = new Size(92, 5);
+    } else if (foot) {
+      const f = c.addStack(); f.addSpacer();
+      T(f, foot, 9, DIM);
     }
   };
 
   // تُضاف من اليسار: فتُقرأ من اليمين «اليوم» ثم «الربع» ثم «وُفِّر»
-  col('وُفِّر', money(d.saved), 0, 0, d.saved >= 0 ? OK : BAD);
+  // ووُفِّر = ما دخل ناقصَ ما صُرف، فلا يُفهم بلا ذكر الدخل الذي قيس عليه.
+  col('وُفِّر', money(d.saved), 0, 0, d.saved >= 0 ? OK : BAD,
+    d.income > 0 ? 'من دخل ' + money(d.income) : 'لا دخل مسجَّل');
   cols.addSpacer();
   col('الربع', money(d.weekSpent) + ' / ' + money(d.weekLimit), d.weekSpent, d.weekLimit);
   cols.addSpacer();
