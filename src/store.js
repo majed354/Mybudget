@@ -127,12 +127,42 @@ export const DEFAULT_SETTINGS = {
 };
 
 /**
- * ختمُ آخر تغييرٍ فعلي في الإعدادات والقواعد والحسابات.
+ * ختمُ آخر تغييرٍ فعلي — بابًا بابًا لا ختمًا واحدًا للبيت كلّه.
+ *
+ * كان الختم واحدًا، والدمج يمنح إعدادات صاحبِ الختم الأحدثِ السيادةَ كلَّها.
+ * فمن فعّل أداة الشاشة على حاسوبه — وهو فعلٌ لا صلة له بالدورة — صارت
+ * إعداداتُه كلُّها أحدث، فحملت معها `cycleStartDay` القديمة فانقلبت من ٢٧
+ * إلى ١، ونشرت الأداةُ «٩ من ٣١». ثم يُفتح التطبيق على الجوال فيعيدها،
+ * فتتذبذب الأرقام بلا سبب ظاهر.
+ *
+ * فصار لكل بابٍ ختمُه: من غيّر بابًا لم يرث سيادةَ ما لم يُغيّره.
  * الدمج كان يرجّح بـ`exportedAt`، وهو يُختم لحظةَ التصدير — فالنسخة المحلية
  * أحدثُ دائمًا بحكم التعريف، فلا يصل الجهازَ شيءٌ ممّا ضبطتَه على الآخر:
  * وسمُ حساباتك، وسقوفُ سياستك، وقواعدُك. فنختم لحظةَ الحفظ لا لحظة التصدير.
  */
-export async function touchSettings() { return db.set('settingsAt', new Date().toISOString()); }
+export async function getSettingsStamps() {
+  const cur = await db.get('settingsStamps', null);
+  if (cur && typeof cur === 'object' && !Array.isArray(cur)) return { ...cur };
+  // ترحيلٌ من الختم الواحد: تأخذ كلُّ الأبواب ختمَه، فلا يضيع سبقُ جهازٍ
+  const one = await db.get('settingsAt', null);
+  if (!one) return {};
+  const seed = {};
+  for (const k of Object.keys(DEFAULT_SETTINGS)) seed[k] = one;
+  return seed;
+}
+
+/**
+ * @param {string[]|null} sections الأبواب التي تغيّرت فعلًا، أو null لكلّها.
+ */
+export async function touchSettings(sections = null) {
+  const now = new Date().toISOString();
+  const map = await getSettingsStamps();
+  for (const k of (sections?.length ? sections : Object.keys(DEFAULT_SETTINGS))) map[k] = now;
+  await db.set('settingsStamps', map);
+  // الختم الواحد يبقى لجهازٍ لم يُحدَّث بعد، فيقرأ ما يفهمه ولا ينكسر
+  return db.set('settingsAt', now);
+}
+
 export async function getSettingsAt() { return db.get('settingsAt', null); }
 
 export async function getSettings() {
@@ -143,7 +173,7 @@ export async function saveSettings(patch) {
   const cur = await getSettings();
   const next = deepMerge(cur, patch);
   await db.set('settings', next);
-  await touchSettings();
+  await touchSettings(Object.keys(patch || {}));
   return next;
 }
 
@@ -159,11 +189,11 @@ export function deepMerge(a, b) {
 
 // ── قواعد التصنيف التي يبنيها المستخدم ────────────────────────────────────
 export async function getRules() { return (await db.get('rules', [])) || []; }
-export async function saveRules(rules) { await db.set('rules', rules); return touchSettings(); }
+export async function saveRules(rules) { await db.set('rules', rules); return touchSettings(['rules']); }
 
 // ── الحسابات ──────────────────────────────────────────────────────────────
 export async function getAccounts() { return (await db.get('accounts', {})) || {}; }
-export async function saveAccounts(map) { await db.set('accounts', map); return touchSettings(); }
+export async function saveAccounts(map) { await db.set('accounts', map); return touchSettings(['accounts']); }
 
 // ── شواهد الحذف ───────────────────────────────────────────────────────────
 /**
@@ -215,6 +245,7 @@ export async function exportAll() {
     version: 1,
     exportedAt: new Date().toISOString(),
     settingsAt: await getSettingsAt(),
+    settingsStamps: await getSettingsStamps(),
     transactions: await db.allTx(),
     settings: await getSettings(),
     rules: await getRules(),
@@ -234,5 +265,6 @@ export async function importAll(payload, { replace = false } = {}) {
   // ختم النسخة الواردة يُنقل كما هو: لو خُتم بالآن لبدا الجهاز أحدثَ ممّا هو
   // في كل دمجٍ تالٍ، فعاد العطب الذي أُصلح — وغياب الختم يعني «لا نعلم».
   if (payload.settingsAt) await db.set('settingsAt', payload.settingsAt);
+  if (payload.settingsStamps) await db.set('settingsStamps', payload.settingsStamps);
   return payload.transactions.length;
 }

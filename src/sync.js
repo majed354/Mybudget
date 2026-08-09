@@ -180,16 +180,45 @@ export function mergeSnapshots(local, remote) {
   for (const h of Object.keys(deleted)) byHash.delete(h);
 
   // الختم الصحيح هو لحظة تغيير الإعدادات، لا لحظة تصدير النسخة: الثانية
-  // تُختم في كل تصدير فتجعل المحلّي أحدثَ أبدًا، فلا يصل شيءٌ من الجهاز الآخر
-  const stamp = (s) => String(s?.settingsAt || s?.exportedAt || '');
-  const winner = stamp(local) >= stamp(remote) ? local : remote;
+  // تُختم في كل تصدير فتجعل المحلّي أحدثَ أبدًا، فلا يصل شيءٌ من الجهاز الآخر.
+  //
+  // ويُقاس بابًا بابًا لا بابًا واحدًا: الختم الواحد كان يمنح إعدادات صاحبه
+  // السيادةَ كلَّها، فمن غيّر بابًا على جهازٍ ورث سيادةَ ما لم يُغيّره — فتعود
+  // قيمةٌ قديمة من بابٍ آخر فتنقض ما ضُبط على الجهاز الثاني.
+  // ومن لم يبعث خرائط أختام فجهازُه على نسخةٍ أقدم: يُحمل ختمُه الواحد على
+  // أبوابه كلها كما كان، فلا ينكسر ولا يُظلم.
+  const stampsOf = (x) => {
+    const m = x?.settingsStamps;
+    if (m && typeof m === 'object' && !Array.isArray(m)) return m;
+    const one = String(x?.settingsAt || x?.exportedAt || '');
+    return one ? { '*': one } : {};
+  };
+  const ls = stampsOf(local), rs = stampsOf(remote);
+  const at = (m, sec) => String(m[sec] ?? m['*'] ?? '');
+
+  const settings = {};
+  for (const sec of new Set([...Object.keys(local.settings || {}), ...Object.keys(remote.settings || {})])) {
+    const inL = !!local.settings && sec in local.settings;
+    const inR = !!remote.settings && sec in remote.settings;
+    // بابٌ عند طرفٍ دون الآخر يُؤخذ كما هو: غيابُه ليس حذفًا بل قِدَم نسخة
+    if (!inL) { settings[sec] = remote.settings[sec]; continue; }
+    if (!inR) { settings[sec] = local.settings[sec]; continue; }
+    settings[sec] = at(ls, sec) >= at(rs, sec) ? local.settings[sec] : remote.settings[sec];
+  }
+
+  const stamps = {};
+  for (const k of new Set([...Object.keys(ls), ...Object.keys(rs)])) {
+    stamps[k] = at(ls, k) >= at(rs, k) ? at(ls, k) : at(rs, k);
+  }
+  const newest = Object.values(stamps).sort().pop() || null;
 
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    settingsAt: stamp(winner) || null,
+    settingsAt: newest,
+    settingsStamps: stamps,
     transactions: [...byHash.values()].sort((a, b) => a.date.localeCompare(b.date)),
-    settings: winner.settings,
+    settings,
     rules: mergeRules(local.rules, remote.rules),
     accounts: { ...(remote.accounts || {}), ...(local.accounts || {}) },
     deleted,
