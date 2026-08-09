@@ -595,7 +595,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .wk-amount, .wk-cap { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wk-cap { font-size: .72rem; }
 @media (max-width: 420px) {
-  .weeks li { grid-template-columns: minmax(4.6rem, auto) 1fr auto; }
+  .weeks > li { grid-template-columns: minmax(4.6rem, auto) 1fr auto; }
+  .weeks > li.q-detail { grid-template-columns: none; }
   .wk-days, .wk-cap { display: none; }
 }
 
@@ -603,9 +604,28 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .weeks li[data-action] { cursor: pointer; border-radius: 9px; padding-inline: 6px; }
 .weeks li[data-action]:hover { background: var(--surface-2); }
 .weeks li.open { background: var(--surface-2); }
-.q-detail { display: block; grid-template-columns: none; background: var(--surface-2); border-radius: 11px; padding: 10px 12px; margin: 2px 0 8px; }
-.qd-sum { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 700; font-size: .85rem; margin-bottom: 6px; }
-.qd-sum .hint { font-weight: 400; }
+/* التخصيص هنا مقصود: `.weeks li` أعلى من `.q-detail` وحدها، فكانت شبكةُ
+   الأرباع تُطبَّق على التفصيل فتصفّ أبناءه أعمدةً — وقيس أحدهم عند
+   س = −٩٥ خارج الشاشة. فيلزم أن يعلوها لا أن يساويها. */
+.weeks > li.q-detail {
+  display: block; grid-template-columns: none; grid-column: 1 / -1;
+  background: var(--surface-2); border-radius: 11px; padding: 10px 12px; margin: 2px 0 8px;
+  cursor: default;
+}
+.weeks > li.q-detail:hover { background: var(--surface-2); }
+.weeks > li.q-detail .tx-row { padding-inline: 0; }
+.qd-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.qd-amount { font-size: 1.5rem; font-weight: 800; line-height: 1.2; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.qd-days { font-size: .72rem; color: var(--muted); direction: ltr; text-align: end; white-space: nowrap; line-height: 1.5; }
+.qd-cats { display: flex; flex-direction: column; gap: 2px; }
+.qd-cat { display: grid; grid-template-columns: 1fr auto 2.6rem; gap: 10px; align-items: baseline; font-size: .84rem; padding: 4px 0; }
+.qd-cat b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qd-cat .muted { text-align: end; font-size: .76rem; }
+.qd-top5 { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.qd-tx { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: .8rem; padding: 3px 0; }
+.qd-tx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qd-tx .ltr { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.btn.wide { width: 100%; margin-top: 10px; }
 .range-chip {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   background: var(--accent-soft); color: var(--accent);

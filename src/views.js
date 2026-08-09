@@ -205,28 +205,34 @@ function quarterDetail(w, state) {
     .sort((a, b) => a.amount - b.amount);
 
   const byCat = new Map();
-  for (const t of rows) {
-    const k = t.category || 'other';
-    byCat.set(k, (byCat.get(k) || 0) - t.amount);
-  }
-  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  for (const t of rows) byCat.set(t.category || 'other', (byCat.get(t.category || 'other') || 0) - t.amount);
+  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
   const total = rows.reduce((s, t) => s - t.amount, 0);
 
   return `<li class="q-detail">
-    <div class="qd-sum">
-      <span>${num(rows.length)} عملية · ${money(total, { round: true })}</span>
-      <span class="hint">${escapeHTML(dateLabel(w.from))} — ${escapeHTML(dateLabel(w.to))}</span>
+    <div class="qd-top">
+      <div>
+        <div class="kpi-label">صُرف في الربع ${num(w.i)}</div>
+        <div class="qd-amount ltr ${w.over ? 'neg' : ''}">${money(total, { round: true })}</div>
+        <div class="kpi-sub">${num(rows.length)} عملية · من حدٍّ ${money(w.limit, { round: true })}</div>
+      </div>
+      <div class="qd-days">${escapeHTML(dateLabel(w.from))}<br>${escapeHTML(dateLabel(w.to))}</div>
     </div>
-    ${top.length ? `<ul class="top-cats">${top.map(([id, amt]) => `<li>
-      <span class="tc-name">${escapeHTML(CATEGORY_MAP[id]?.ar || id)}</span>
-      <span class="tc-bar"><i style="width:${Math.round((amt / (top[0][1] || 1)) * 100)}%"></i></span>
-      <span class="tc-amount ltr">${money(amt, { round: true })}</span>
-      <span class="tc-share">${pct(total ? amt / total : 0, 0)}</span>
-    </li>`).join('')}</ul>` : '<p class="hint">لا صرف في هذا الربع.</p>'}
-    ${rows.length ? `${txTable(rows.slice(0, 5), { state })}
-      ${rows.length > 5 ? `<div class="row center mt">
-        <button class="btn tiny" data-action="quarter-all" data-from="${w.from}" data-to="${w.to}">كل عمليات الربع (${num(rows.length)})</button>
-      </div>` : ''}` : ''}
+
+    ${top.length ? `<div class="qd-cats">${top.map(([id, amt]) => `<div class="qd-cat">
+      <span>${escapeHTML(CATEGORY_MAP[id]?.ar || id)}</span>
+      <b class="ltr">${money(amt, { round: true })}</b>
+      <span class="muted">${pct(total ? amt / total : 0, 0)}</span>
+    </div>`).join('')}</div>` : '<p class="hint">لا صرف في هذا الربع.</p>'}
+
+    ${rows.length ? `<div class="qd-top5"><div class="kpi-label">أكبر عملياته</div>
+      ${rows.slice(0, 4).map((t) => `<div class="qd-tx">
+        <span class="qd-tx-name">${escapeHTML(t.merchant || t.merchantHint || (t.desc || '').slice(0, 28))}</span>
+        <span class="ltr">${money(-t.amount, { round: true })}</span>
+      </div>`).join('')}</div>` : ''}
+
+    ${rows.length > 4 ? `<button class="btn tiny wide" data-action="quarter-all" data-from="${w.from}" data-to="${w.to}">
+      كل عمليات الربع (${num(rows.length)}) ←</button>` : ''}
   </li>`;
 }
 
