@@ -14,7 +14,11 @@ import { CATEGORY_MAP, GROUP_OF, ESSENTIAL_GROUPS, FLEX_GROUPS, TYPES } from './
 export function markExclusions(list, settings) {
   const cfg = settings?.analysis || {};
   for (const t of list) {
-    if (t.excludeReason === 'user') continue;
+    // قرار المستخدم فوق كل استنتاج، وفي الاتجاهين: من استبعد بيده يبقى
+    // مستبعدًا، ومن أرجع بيده ما استبعده المحرّك يبقى محسوبًا. وكان الثبات
+    // في الاستبعاد وحده، فمن أرجع تحويلًا داخليًّا وجده مستبعدًا في أول
+    // إعادة حساب — يظنّ أن نقرته لم تُسمع.
+    if (t.userExcluded === true) { t.excluded = true; t.excludeReason = 'user'; t.linkId = null; continue; }
     t.excluded = false;
     t.excludeReason = null;
     t.linkId = null;
@@ -58,6 +62,11 @@ export function markExclusions(list, settings) {
       t.excluded = true;
       t.excludeReason = 'extraordinary';
     }
+  }
+
+  // آخر كلمةٍ لصاحب البيانات: ما أرجعه بيده يبقى محسوبًا مهما رأى المحرّك
+  for (const t of list) {
+    if (t.userExcluded === false) { t.excluded = false; t.excludeReason = null; }
   }
   return list;
 }

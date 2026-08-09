@@ -557,3 +557,37 @@ test('الأصناف المقترحة: المجهَّز ثم ما أضافه ا�
   assert.equal(withMine.filter((s) => s === 'عصائر').length, 1, 'لا يتكرر ما كان مجهَّزًا');
   assert.deepEqual(subcategoriesFor('لا-وجود-له'), [], 'مجالٌ بلا أصناف لا يكسر شيئًا');
 });
+
+test('قرار «غير محسوب» يثبت في الاتجاهين', () => {
+  const mk = (id, extra) => ({ id, date: '2026-08-01', amount: -100, account: 'a', type: 'pos', ...extra });
+
+  // ما استبعده المستخدم يبقى مستبعدًا ولو لم يرَ المحرّك سببًا
+  const a = [mk(1, { userExcluded: true })];
+  markExclusions(a, { analysis: {} });
+  assert.equal(a[0].excluded, true);
+  assert.equal(a[0].excludeReason, 'user');
+
+  // وما أرجعه بيده يبقى محسوبًا ولو رآه المحرّك تحويلًا داخليًّا
+  const b = [mk(2, { type: 'internal', userExcluded: false })];
+  markExclusions(b, { analysis: {} });
+  assert.equal(b[0].excluded, false, 'وإلا وجد المستخدم نقرته لم تُسمع');
+
+  // وبلا قرارٍ منه يبقى الحكم للمحرّك
+  const c = [mk(3, { type: 'internal' })];
+  markExclusions(c, { analysis: {} });
+  assert.equal(c[0].excluded, true);
+});
+
+test('قاموس المجالات يشمل الوارد كما يشمل الصادر', async () => {
+  const { CATEGORIES, subcategoriesFor, CATEGORY_MAP } = await import('../src/classify.js');
+  const income = CATEGORIES.filter((c) => c.group === 'دخل');
+  assert.ok(income.length >= 8, `مجالات الدخل ${income.length}`);
+  assert.equal(CATEGORY_MAP.salary.ar, 'راتب');
+  assert.ok(subcategoriesFor('salary').includes('بدل سكن'));
+  assert.ok(subcategoriesFor('refund_in').includes('كاش باك'));
+  // ولا تدخل مجالاتُ الدخل في مجموعات الصرف فتُفسد المتوسطات
+  const { ESSENTIAL_GROUPS, FLEX_GROUPS, AMBIGUOUS_GROUPS } = await import('../src/classify.js');
+  for (const c of income) {
+    assert.ok(!ESSENTIAL_GROUPS.has(c.group) && !FLEX_GROUPS.has(c.group) && !AMBIGUOUS_GROUPS.has(c.group), c.id);
+  }
+});

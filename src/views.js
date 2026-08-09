@@ -591,7 +591,8 @@ function txTable(rows, { editable = false, state = {} } = {}) {
   if (!rows.length) return empty('لا توجد عمليات مطابقة.');
   return `<ul class="tx-list">${rows.map((t) => `
     <li class="tx-row ${t.excluded ? 'excluded' : ''}">
-      <div class="tx-main">
+      <div class="tx-main" data-action="tag-open" data-id="${t.id}" role="button" tabindex="0"
+        title="اضغط للتعديل: المجال والصنف الفرعي، أو جعله غير محسوب">
         <span class="tx-title">${escapeHTML(t.merchant || t.bankType || (t.desc || '').slice(0, 60))}</span>
         <span class="tx-amount ltr ${t.amount < 0 ? 'neg' : 'pos'}">${money(t.amount)}</span>
       </div>
@@ -600,7 +601,7 @@ function txTable(rows, { editable = false, state = {} } = {}) {
         <span>${TYPES[t.type]?.icon || ''} ${escapeHTML(TYPES[t.type]?.ar || '')}</span>
         ${t.city ? `<span>${escapeHTML(t.city)}</span>` : ''}
         <span class="tx-acc">${escapeHTML(t.account)}</span>
-        ${t.status === 'pending' ? '<span class="tag warn" title="من إشعار البنك، لم تُطابَق بالكشف بعد">معلَّقة</span>' : ''}
+        ${t.status === 'pending' ? `<span class="tag" title="وصلت من إشعار بنكك وهي محسوبة في صرفك. وحين تستورد الكشف تُطابَق بنظيرتها فتُدمجان في واحدة — ولا تُحتسب مرتين.">📨 من رسالة</span>` : ''}
         ${t.excluded ? `<span class="tag amb">مستبعد: ${excuseAr(t.excludeReason)}</span>` : ''}
       </div>
       <div class="tx-actions">
@@ -634,7 +635,7 @@ function tagEditor(t, state) {
     <div class="row wrap gap">
       <label class="field"><span>المجال</span>
         <select id="tag-cat" data-id="${t.id}">
-          ${CATEGORIES.map((c) => `<option value="${c.id}" ${cat === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}
+          ${catOptions(cat, t.amount)}
         </select>
       </label>
       <label class="field"><span>الصنف الفرعي (اختر أو اكتب جديدًا)</span>
@@ -642,11 +643,28 @@ function tagEditor(t, state) {
         <datalist id="tag-sub-list">${subs.map((s) => `<option value="${escapeHTML(s)}"></option>`).join('')}</datalist>
       </label>
     </div>
+    <label class="chk mt"><input type="checkbox" id="tag-exclude" ${t.excluded ? 'checked' : ''}>
+      <span>بندٌ غير محسوب — يظهر في سجلّك ولا يدخل في صرفك ولا دخلك</span></label>
+    ${t.excluded && t.excludeReason && t.excludeReason !== 'user'
+      ? `<p class="hint">مستبعدٌ الآن آليًّا (${escapeHTML(excuseAr(t.excludeReason))}). وإلغاء الاختيار يُرجعه محسوبًا بقرارك.</p>` : ''}
     <div class="row gap end mt">
       <button class="btn" data-action="tag-cancel">إلغاء</button>
       <button class="btn primary" data-action="tag-save" data-id="${t.id}">احفظ وطبّقه على المحل</button>
     </div>
   </div>`;
+}
+
+/**
+ * قائمة المجالات مجمَّعةً بطبيعتها، والوارد يُقدَّم في العمليات الموجبة.
+ * فمن يصنّف راتبًا لا يُعرض عليه «بقالة وتموين» أولًا، ومن يصنّف شراءً لا
+ * يبحث عن «مطاعم» تحت مجالات الدخل.
+ */
+function catOptions(selected, amount) {
+  const income = amount > 0;
+  const groups = [...new Set(CATEGORIES.map((c) => c.group))]
+    .sort((a, b) => (a === 'دخل' ? -1 : b === 'دخل' ? 1 : 0) * (income ? 1 : -1));
+  return groups.map((g) => `<optgroup label="${escapeHTML(g)}">${CATEGORIES.filter((c) => c.group === g)
+    .map((c) => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${escapeHTML(c.ar)}</option>`).join('')}</optgroup>`).join('');
 }
 
 function excuseAr(r) {

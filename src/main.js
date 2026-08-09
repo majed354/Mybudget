@@ -921,6 +921,13 @@ async function saveTag(id) {
     }
   }
 
+  // «غير محسوب» قرارُ المستخدم، وسببه `user` — وهو وحده ما لا يدهسه
+  // محرّك الاستبعاد في كل إعادة حساب، فيثبت قراره على ما قرّر.
+  const excluded = !!document.getElementById('tag-exclude')?.checked;
+  t.userExcluded = excluded;
+  t.excluded = excluded;
+  t.excludeReason = excluded ? 'user' : null;
+
   t.category = category;
   t.subcategory = subcategory;
   t.categorySource = 'user';
