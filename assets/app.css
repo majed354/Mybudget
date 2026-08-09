@@ -598,3 +598,16 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .weeks li { grid-template-columns: minmax(4.6rem, auto) 1fr auto; }
   .wk-days, .wk-cap { display: none; }
 }
+
+/* ── تفصيل الربع ──────────────────────────────────────────── */
+.weeks li[data-action] { cursor: pointer; border-radius: 9px; padding-inline: 6px; }
+.weeks li[data-action]:hover { background: var(--surface-2); }
+.weeks li.open { background: var(--surface-2); }
+.q-detail { display: block; grid-template-columns: none; background: var(--surface-2); border-radius: 11px; padding: 10px 12px; margin: 2px 0 8px; }
+.qd-sum { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 700; font-size: .85rem; margin-bottom: 6px; }
+.qd-sum .hint { font-weight: 400; }
+.range-chip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 10px; padding: 7px 11px; margin-bottom: 10px; font-size: .82rem; font-weight: 600;
+}

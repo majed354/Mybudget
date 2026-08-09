@@ -196,6 +196,41 @@ function forecastCard(f) {
 }
 
 /**
+ * تفصيل الربع: أين ذهب صرفُه، وعملياته.
+ * الرقم يقول «تجاوزت»، والتفصيل يقول «بماذا» — وبه وحده يُصحَّح السلوك.
+ */
+function quarterDetail(w, state) {
+  const rows = (state.analysis?.list || [])
+    .filter((t) => !t.excluded && t.amount < 0 && t.date >= w.from && t.date <= w.to)
+    .sort((a, b) => a.amount - b.amount);
+
+  const byCat = new Map();
+  for (const t of rows) {
+    const k = t.category || 'other';
+    byCat.set(k, (byCat.get(k) || 0) - t.amount);
+  }
+  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const total = rows.reduce((s, t) => s - t.amount, 0);
+
+  return `<li class="q-detail">
+    <div class="qd-sum">
+      <span>${num(rows.length)} عملية · ${money(total, { round: true })}</span>
+      <span class="hint">${escapeHTML(dateLabel(w.from))} — ${escapeHTML(dateLabel(w.to))}</span>
+    </div>
+    ${top.length ? `<ul class="top-cats">${top.map(([id, amt]) => `<li>
+      <span class="tc-name">${escapeHTML(CATEGORY_MAP[id]?.ar || id)}</span>
+      <span class="tc-bar"><i style="width:${Math.round((amt / (top[0][1] || 1)) * 100)}%"></i></span>
+      <span class="tc-amount ltr">${money(amt, { round: true })}</span>
+      <span class="tc-share">${pct(total ? amt / total : 0, 0)}</span>
+    </li>`).join('')}</ul>` : '<p class="hint">لا صرف في هذا الربع.</p>'}
+    ${rows.length ? `${txTable(rows.slice(0, 5), { state })}
+      ${rows.length > 5 ? `<div class="row center mt">
+        <button class="btn tiny" data-action="quarter-all" data-from="${w.from}" data-to="${w.to}">كل عمليات الربع (${num(rows.length)})</button>
+      </div>` : ''}` : ''}
+  </li>`;
+}
+
+/**
  * علامةٌ على الحال: التشجيع يُبقي المستخدم على العادة، والرقم وحده أصمّ.
  * ولا تُمنح إلا على ما انقضى أو على وتيرةٍ حقيقية — فمدحٌ في أول اليوم
  * على صرفٍ لم يقع بعدُ يفقد معناه سريعًا.
@@ -259,14 +294,16 @@ function monthCard(m, state) {
       </div>` : ''}
 
       ${m.weeks?.length ? `<h3>أرباع الدورة</h3>
-      <ul class="weeks">${m.weeks.map((w) => `<li class="${w.isCurrent ? 'now' : w.isPast ? 'past' : 'future'}">
+      <ul class="weeks">${m.weeks.map((w) => `<li class="${w.isCurrent ? 'now' : w.isPast ? 'past' : 'future'} ${state?.openQuarter === w.i ? 'open' : ''}"
+        data-action="quarter-open" data-q="${w.i}" role="button" tabindex="0" title="اضغط لترى عمليات هذا الربع">
         <span class="wk-no">${w.isCurrent ? '◆' : w.isPast ? mark(w.over, w.spent / w.limit) : '○'} الربع ${num(w.i)}</span>
         <span class="wk-days">${escapeHTML(dateLabel(w.from).slice(0, 5))} — ${escapeHTML(dateLabel(w.to).slice(0, 5))}</span>
         <span class="meter sm"><span class="meter-fill ${w.over ? 'over' : w.isPast || w.isCurrent ? 'ok' : 'idle'}"
           style="width:${Math.min(100, Math.max(0, w.usedShare * 100))}%"></span></span>
         <span class="wk-amount ltr ${w.over ? 'neg' : ''}">${money(w.spent, { round: true })}</span>
         <span class="wk-cap ltr muted">${money(w.limit, { round: true })}</span>
-      </li>`).join('')}</ul>` : ''}
+      </li>
+      ${state?.openQuarter === w.i ? quarterDetail(w, state) : ''}`).join('')}</ul>` : ''}
 
       <div class="month-grid">
         <div class="mini">
@@ -322,7 +359,13 @@ export function viewDashboard(a, state) {
 
   // آخر ما وقع، في صدر الشاشة: هذا سؤال اللحظة — «هل سُجّل شرائي؟» — ولا
   // يجيبه متوسطٌ ولا وسيط. والقائمة كاملةٌ خلف زرّ، فلا تُزاحم اللوحة.
-  const latest = (a.list || []).slice()
+  // ومتى تصفّح دورةً ماضية فآخرُ عملياتها هي المقصودة لا آخر ما وقع مطلقًا:
+  // بطاقةٌ تعرض أغسطس وقائمةٌ تحتها تعرض أكتوبر تناقضٌ يُربك لا يُفيد.
+  const vc = state.viewCycle;
+  const inView = vc && !vc.isCurrent
+    ? (a.list || []).filter((t) => t.date >= vc.from && t.date <= vc.to)
+    : (a.list || []);
+  const latest = inView.slice()
     .sort((x, y) => (x.date === y.date ? (x.seq || 0) - (y.seq || 0) : x.date.localeCompare(y.date)))
     .reverse().slice(0, 5);
 
@@ -331,7 +374,7 @@ export function viewDashboard(a, state) {
     ${monthCard(state.viewCycle || state.month, state)}
     ${forecastCard(state.forecast)}
 
-    ${latest.length ? card('آخر خمس عمليات', txTable(latest, { state }), {
+    ${latest.length ? card(vc && !vc.isCurrent ? `آخر عمليات ${monthLabel(vc.key)}` : 'آخر خمس عمليات', txTable(latest, { state }), {
       actions: '<button class="btn tiny" data-action="go-tx">كل العمليات</button>',
     }) : ''}
 
@@ -628,6 +671,8 @@ export function viewTransactions(a, state) {
   if (state.filter.onlyExcluded) rows = rows.filter((t) => t.excluded);
   if (state.filter.cat) rows = rows.filter((t) => t.category === state.filter.cat);
   if (state.filter.account) rows = rows.filter((t) => t.account === state.filter.account);
+  if (state.filter.from) rows = rows.filter((t) => t.date >= state.filter.from);
+  if (state.filter.to) rows = rows.filter((t) => t.date <= state.filter.to);
   if (q) {
     const qq = q.toLowerCase();
     rows = rows.filter((t) => `${t.desc} ${t.merchant || ''} ${t.ref || ''} ${t.bankType || ''}`.toLowerCase().includes(qq));
@@ -641,6 +686,10 @@ export function viewTransactions(a, state) {
 
   return `<div class="grid">
     ${card('', `
+      ${state.filter.from || state.filter.to ? `<div class="range-chip">
+        <span>محصورٌ بـ ${escapeHTML(dateLabel(state.filter.from))} — ${escapeHTML(dateLabel(state.filter.to))}</span>
+        <button class="btn tiny" data-action="range-clear">أزِل الحصر</button>
+      </div>` : ''}
       <div class="row wrap gap filters">
         <input id="q" type="search" placeholder="ابحث باسم تاجر أو وصف أو رقم عملية…" value="${escapeHTML(q)}">
         <select id="f-cat"><option value="">كل المجالات</option>${CATEGORIES.map((c) => `<option value="${c.id}" ${state.filter.cat === c.id ? 'selected' : ''}>${c.ar}</option>`).join('')}</select>

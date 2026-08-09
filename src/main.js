@@ -25,7 +25,7 @@ const state = {
   pending: null,
   importAccount: '',
   openCategory: null,
-  filter: { q: '', cat: '', account: '', onlyUncat: false, onlyExcluded: false },
+  filter: { q: '', cat: '', account: '', onlyUncat: false, onlyExcluded: false, from: '', to: '' },
   txLimit: 40,                // سقف القائمة المعروضة، يزيد بالطلب
   finance: { amount: 100000, months: 60, annualRate: 0.0599, mode: 'flat', knownInstallment: null },
   accountsSummary: [],
@@ -629,6 +629,24 @@ function bindEvents() {
       toast('نُسخ السكربت — الصقه في Scriptable', 'ok');
       return;
     }
+    if (action === 'range-clear') {
+      state.filter = { ...state.filter, from: '', to: '' };
+      render();
+      return;
+    }
+    if (action === 'quarter-open') {
+      const q = Number(el.dataset.q);
+      state.openQuarter = state.openQuarter === q ? null : q;   // الضغط ثانيةً يُغلق
+      render();
+      return;
+    }
+    if (action === 'quarter-all') {
+      // ترشيحٌ بالمدى ينقل المستخدم إلى القائمة كاملةً محصورةً بالربع
+      state.filter = { ...state.filter, from: el.dataset.from, to: el.dataset.to };
+      state.txLimit = V.TX_PAGE;
+      location.hash = 'transactions';
+      return;
+    }
     if (action === 'cycle-prev' || action === 'cycle-next') {
       const cur = state.viewCycle?.key || state.month?.key;
       if (!cur) return;
@@ -1061,6 +1079,7 @@ function updateFinance() {
 function updateFilter() {
   const g = (id) => document.getElementById(id);
   state.filter = {
+    ...state.filter,   // مدى التاريخ يبقى حتى يُلغى صراحةً
     q: g('q')?.value || '',
     cat: g('f-cat')?.value || '',
     account: g('f-acc')?.value || '',
