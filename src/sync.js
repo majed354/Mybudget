@@ -5,6 +5,8 @@
 //   ٢) معرّف التخزين — تجزئةٌ باتجاه واحد، فالخادم يعرف «أين» ولا يعرف «ماذا».
 // من لا يملك المفتاح لا يستطيع فكّ شيء ولو حصل على الكتلة كاملة.
 
+import { SUMMARY_V } from './widget-schema.js';
+
 const ENDPOINT = '/api/sync';
 const SALT = 'mybudget/sync/v1';
 const ITERATIONS = 210000;
@@ -298,7 +300,7 @@ export function widgetSummary(m, at = new Date().toISOString()) {
   if (!m) return null;
   const r2 = (x) => Math.round((x || 0) * 100) / 100;
   return {
-    v: 1,
+    v: SUMMARY_V,
     month: m.key,
     day: m.day,
     daysInMonth: m.daysInMonth,
