@@ -252,7 +252,19 @@ export async function drain(secret, { accountLabel } = {}) {
   // لا نمسح ما لم يُفهم: يبقى ليُراجَع، ويُمسح بمهلته
   const clear = [...added.map((t) => t.smsId), ...purge].filter(Boolean);
   if (clear.length) await call('DELETE', box, null, `&ids=${clear.join(',')}`);
-  return { added, failed };
+  return { added, failed, arrived: messages.map(originOf) };
+}
+
+/**
+ * مِن أين جاءت الرسالة، كما يراها صاحبُ النسخة.
+ * المرسِل كما بعثته أتمتة الجوال أوّلًا، فهو الذي يدلّ على الأتمتة نفسها.
+ * فإن لم تبعثه، فالمصرف كما استُدلّ عليه من نصّ الرسالة.
+ */
+function originOf(m) {
+  const sender = String(m.sender || '').trim();
+  if (sender) return sender;
+  const b = detectBank(m.text || '');
+  return b?.ar || 'بلا مرسِل';
 }
 
 /**
@@ -345,6 +357,27 @@ export function applyReconciliation(matched) {
  * لتُراجَع، فتُعاد في كل سحبةٍ — ولو عُدّت لتضخّم الرقم بلا عملية واحدة.
  * والسجلّ محليّ على الجهاز لأن السحب يقع على أيّ جهازٍ فُتح أولًا.
  */
+/**
+ * من وصلت منه رسالةٌ ومتى — لا كم عمليةً دخلت.
+ *
+ * حين لا تصل رسائل مصرفٍ بعينه، لا يُعرف أين انقطع الطريق: أفي أتمتة
+ * الجوال، أم في الصندوق، أم في التحليل؟ والعدّاد وحده لا يفرّق بين
+ * «لم يصل شيء» و«وصل ففُهم فأُخذ». فيُسجَّل كلُّ ما وصل بمصدره، فيُرى
+ * غيابُ مصرفٍ غيابًا لا يُلتبس بغيره.
+ *
+ * ويُسجَّل المصدر وحده — لا نصٌّ ولا مبلغ — فالسجلّ دليلُ طريقٍ لا نسخةُ رسائل.
+ */
+export function recordSenders(log, arrived, date) {
+  const out = { ...(log || {}) };
+  for (const who of arrived || []) {
+    const cur = out[who] || { n: 0, last: '' };
+    out[who] = { n: cur.n + 1, last: date > cur.last ? date : cur.last };
+  }
+  const cutoff = new Date(Date.parse(`${date}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10);
+  for (const [k, v] of Object.entries(out)) if (v.last < cutoff) delete out[k];
+  return out;
+}
+
 export function recordDrain(log, date, count) {
   const out = { ...(log || {}) };
   if (count > 0) out[date] = (out[date] || 0) + count;

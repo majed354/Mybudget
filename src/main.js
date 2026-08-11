@@ -33,7 +33,7 @@ const state = {
   sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
-  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, waiting: 0 },
+  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, senders: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
   paste: null,                // لصق الرسائل الفائتة: النصّ ونتيجة تحليله
   tagging: null,              // معرّف العملية التي يُحرَّر تصنيفها
@@ -78,6 +78,7 @@ async function boot() {
   state.sync.lastAt = await db.get('syncLastAt', null);
   state.skipSync = await db.get('skipSync', false);
   state.inbox.log = await db.get('inboxLog', {});
+  state.inbox.senders = await db.get('inboxSenders', {});
   state.notify.enabled = await db.get('notifyEnabled', false);
   state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
@@ -133,9 +134,14 @@ async function drainInbox({ silent = false } = {}) {
   if (!state.sync.secret) return;
   state.inbox.busy = true;
   try {
-    const { added, failed } = await Inbox.drain(state.sync.secret, { accountLabel: 'إشعارات البنك' });
+    const { added, failed, arrived } = await Inbox.drain(state.sync.secret, { accountLabel: 'إشعارات البنك' });
     state.inbox.failed = failed;
     state.inbox.status = '';
+    // من وصل يُسجَّل ولو لم يصر عمليةً: غيابُ مصرفٍ دليلٌ على أتمتته لا عليه
+    if (arrived?.length) {
+      state.inbox.senders = Inbox.recordSenders(state.inbox.senders, arrived, todayISO());
+      await db.set('inboxSenders', state.inbox.senders);
+    }
     if (added.length) {
       const { fresh } = dedupe(added, await db.existingHashes());
       if (fresh.length) {

@@ -1041,6 +1041,12 @@ function inboxHarvest(i) {
   const month = lastDays(i.log, today, 30);
   const hoursSince = i.lastAt ? (Date.now() - Date.parse(i.lastAt)) / 3600000 : null;
   const stale = hoursSince != null && hoursSince > 24;
+  // مرتَّبون بالأحدث: من انقطعت رسائله يهبط إلى آخر القائمة فيُلحظ انقطاعه
+  const sendersRows = Object.entries(i.senders || {})
+    .sort((a, b) => (b[1].last || '').localeCompare(a[1].last || ''))
+    .map(([who, v]) => `<tr><td>${escapeHTML(who)}</td>
+      <td class="ltr">${num(v.n)} رسالة · آخرها ${escapeHTML(dateLabel(v.last))}</td></tr>`)
+    .join('');
 
   return `
     <h3>حصاد الرسائل على هذا الجهاز</h3>
@@ -1051,6 +1057,14 @@ function inboxHarvest(i) {
         <tr><td>آخر ثلاثين يومًا</td><td class="ltr">${num(month.total)} عملية</td></tr>
       </tbody>
     </table>
+
+    <h3>من وصلت منه رسائل — آخر ثلاثين يومًا</h3>
+    ${sendersRows.length ? `<table class="table compact">
+      <tbody>${sendersRows}</tbody>
+    </table>
+    <p class="hint">يُسجَّل المصدر وحده — لا نصّ ولا مبلغ. ومصرفٌ لا تراه هنا لم تصل منه رسالةٌ قطّ:
+      فالخلل في أتمتة جوالك لا في التطبيق.</p>`
+    : '<p class="hint">لم تصل رسالةٌ بعد. افتح التطبيق بعد أوّل عملية ليُسجَّل مصدرُها.</p>'}
     <table class="table compact mt">
       <thead><tr><th>اليوم</th><th>ما دخل من الرسائل</th></tr></thead>
       <tbody>${week.rows.map((r) => `<tr>

@@ -188,3 +188,41 @@ test('اللصق يفرز ما لم يُفهم ولا يبتلعه', async () =>
   assert.equal(r.failed.length, 1);
   assert.ok(r.failed[0].reason);
 });
+
+// حين لا تصل رسائل مصرفٍ بعينه، لا يُعرف أين انقطع الطريق. فيُسجَّل من وصل.
+test('سجلّ المصادر: يعدّ ويؤرّخ ويُقلّم ما جاوز ثلاثين يومًا', async () => {
+  const { recordSenders } = await import('../src/inbox.js');
+  let log = recordSenders({}, ['BankAlbilad', 'Alrajhi', 'BankAlbilad'], '2026-08-01');
+  assert.deepEqual(log.BankAlbilad, { n: 2, last: '2026-08-01' });
+  assert.deepEqual(log.Alrajhi, { n: 1, last: '2026-08-01' });
+
+  log = recordSenders(log, ['Alrajhi'], '2026-08-11');
+  assert.deepEqual(log.Alrajhi, { n: 2, last: '2026-08-11' });
+  assert.equal(log.BankAlbilad.last, '2026-08-01', 'من لم تصل منه رسالةٌ يبقى بتاريخه');
+
+  const pruned = recordSenders(log, [], '2026-09-05');
+  assert.ok(!pruned.BankAlbilad, 'ما جاوز ثلاثين يومًا يسقط');
+  assert.ok(pruned.Alrajhi, 'والقريب يبقى');
+});
+
+test('السحب يخبر بمن وصل، ولو لم يصر عمليةً', async (t) => {
+  const { drain } = await import('../src/inbox.js');
+  const msgs = [
+    { id: 'a', sender: 'BankAlbilad', text: 'شراء نقاط بيع\nمدى1234 Apple Pay\nبـ55 SAR\nمنمتجر\n2026-08-10 21:07', receivedAt: '2026-08-10T18:07:00Z' },
+    { id: 'b', sender: '', text: 'مشتريات انترنت\nمدى1234\nبـ20 SAR\nمنمتجر آخر', receivedAt: '2026-08-10T18:10:00Z' },
+    { id: 'c', sender: 'Unknown-X', text: 'نصٌّ لا يدلّ على شيء', receivedAt: '2026-08-10T18:12:00Z' },
+  ];
+  const calls = [];
+  global.fetch = async (url, opt) => {
+    calls.push([opt?.method || 'GET', url]);
+    if ((opt?.method || 'GET') === 'GET') return { ok: true, status: 200, json: async () => ({ messages: msgs }) };
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  t.after(() => { delete global.fetch; });
+
+  const out = await drain('a'.repeat(32));
+  assert.deepEqual(out.arrived, ['BankAlbilad', 'بنك البلاد', 'Unknown-X'],
+    'المرسِل أوّلًا، فإن غاب فالمصرف من نصّ الرسالة');
+  assert.equal(out.added.length, 2);
+  assert.equal(out.failed.length, 1, 'ما لم يُفهم يبقى ليُراجَع');
+});
