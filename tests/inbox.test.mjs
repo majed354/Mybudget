@@ -226,3 +226,37 @@ test('السحب يخبر بمن وصل، ولو لم يصر عمليةً', asyn
   assert.equal(out.added.length, 2);
   assert.equal(out.failed.length, 1, 'ما لم يُفهم يبقى ليُراجَع');
 });
+
+/**
+ * الرسالة الواحدة قد تصل مرتين: بإعادة محاولةٍ من أتمتة الجوال، أو بأتمتتين
+ * يلتقط شرطاهما رسالةً واحدة. وكانت البصمة تُبنى من معرّف الإيداع فتُضاعَف.
+ */
+test('هويّةُ الرسالة مضمونُها لا لحظةُ وصولها', async () => {
+  const { parseBankSMS, smsToTransaction, parsePasted } = await import('../src/inbox.js');
+  const { dedupe } = await import('../src/import.js');
+  const T = 'شراء نقاط بيع\nمدى5002 Apple Pay\nبـ440 SAR\nمنمتجر\n2026-08-10 21:07';
+  const p = parseBankSMS(T, { today: '2026-08-11' });
+  const a = smsToTransaction(p, { id: 'إيداع-١', text: T }, 'إشعارات البنك');
+  const b = smsToTransaction(p, { id: 'إيداع-٢', text: T }, 'إشعارات البنك');
+
+  assert.equal(a.hash, b.hash, 'إيداعان لرسالةٍ واحدة');
+  const { fresh, dups } = dedupe([a, b], new Set());
+  assert.equal(fresh.length, 1, 'لا تُحتسب مرتين');
+  assert.equal(dups.length, 1);
+
+  // ولا تُبتلع عمليتان مختلفتان: قوالب المصارف الثلاثة كلُّها تحمل وقتها
+  const T2 = T.replace('21:07', '21:40');
+  const c = smsToTransaction(parseBankSMS(T2, { today: '2026-08-11' }), { id: 'إيداع-٣', text: T2 }, 'إشعارات البنك');
+  assert.notEqual(a.hash, c.hash, 'شراءان بالمبلغ نفسه في وقتين');
+
+  // واللصق والسحب على هويةٍ واحدة: من لصق ما وصل تلقائيًا لا يُضاعفه
+  const pasted = parsePasted(T, { today: '2026-08-11', accountLabel: 'إشعارات البنك' });
+  assert.equal(pasted.added[0].hash, a.hash, 'الملصوقة والمسحوبة رسالةٌ واحدة');
+});
+
+test('رسالةٌ بلا نصّ لا تُسقط البصمة', async () => {
+  const { parseBankSMS, smsToTransaction } = await import('../src/inbox.js');
+  const p = parseBankSMS('شراء نقاط بيع\nمدى5002\nبـ7 SAR\nمنمتجر\n2026-08-10 21:07', { today: '2026-08-11' });
+  const t = smsToTransaction(p, { id: 'x', text: '' }, 'إشعارات البنك');
+  assert.ok(t.hash, 'يرجع إلى معرّف الإيداع');
+});
