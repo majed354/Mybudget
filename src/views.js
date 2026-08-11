@@ -958,6 +958,22 @@ function inboxBody(state) {
     </div>
     <p class="hint">${i.busy ? 'جارٍ…' : i.lastAt ? `آخر سحب: ${escapeHTML(new Date(i.lastAt).toLocaleString('ar-SA'))}` : 'لم يُسحب شيء بعد'}
       ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
+    ${i.last ? `<table class="table compact">
+      <tbody>
+        <tr><td>وصلت</td><td class="ltr"><strong>${num(i.last.arrived)}</strong> رسالة</td></tr>
+        <tr><td>فُهمت</td><td class="ltr">${num(i.last.understood)}</td></tr>
+        <tr><td>أُضيفت</td><td class="ltr ${i.last.added ? 'pos' : 'muted'}"><strong>${num(i.last.added)}</strong></td></tr>
+        <tr><td>مسجَّلة سلفًا</td><td class="ltr ${i.last.dup ? 'warn-text' : 'muted'}">${num(i.last.dup)}</td></tr>
+        <tr><td>لم تُفهم</td><td class="ltr ${i.last.failed ? 'danger-text' : 'muted'}">${num(i.last.failed)}</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">${
+      i.last.arrived === 0 ? 'لم يصل شيء إلى الصندوق: الخلل في أتمتة جوالك لا في التطبيق.'
+      : i.last.added ? 'دخلت العمليات إلى لوحتك.'
+      : i.last.dup ? 'وصلت الرسائل وفُهمت، لكنها مسجَّلة عندك سلفًا — فلم يُضف شيء. ابحث عنها في «العمليات» بتاريخها.'
+      : i.last.failed ? 'وصلت ولم تُفهم — انظر قائمة «رسائل لم تُفهم» أدناه.'
+      : 'وصلت رسائل ولم تصر عملياتٍ.'
+    }</p>` : ''}
     ${inboxHarvest(i)}
     ${i.failed?.some((m) => m.misconfig) ? `<div class="alerts" style="border-inline-start-color:var(--danger)">
       <p><strong class="danger-text">الأتمتة ترسل نصّ الشرح لا نصّ الرسالة.</strong>

@@ -33,7 +33,7 @@ const state = {
   sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
-  inbox: { boxId: null, lastAt: null, failed: [], status: '', busy: false, log: {}, senders: {}, waiting: 0 },
+  inbox: { boxId: null, lastAt: null, last: null, failed: [], status: '', busy: false, log: {}, senders: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
   paste: null,                // لصق الرسائل الفائتة: النصّ ونتيجة تحليله
   tagging: null,              // معرّف العملية التي يُحرَّر تصنيفها
@@ -79,6 +79,7 @@ async function boot() {
   state.skipSync = await db.get('skipSync', false);
   state.inbox.log = await db.get('inboxLog', {});
   state.inbox.senders = await db.get('inboxSenders', {});
+  state.inbox.last = await db.get('inboxLast', null);
   state.notify.enabled = await db.get('notifyEnabled', false);
   state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
@@ -142,20 +143,43 @@ async function drainInbox({ silent = false } = {}) {
       state.inbox.senders = Inbox.recordSenders(state.inbox.senders, arrived, todayISO());
       await db.set('inboxSenders', state.inbox.senders);
     }
+    let fresh = [], dups = [];
     if (added.length) {
-      const { fresh } = dedupe(added, await db.existingHashes());
+      ({ fresh, dups } = dedupe(added, await db.existingHashes()));
       if (fresh.length) {
         await db.putMany(fresh);
         // سجلّ الحصاد: به يتأكّد المستخدم أن الأتمتة تعمل دون أن ينتظر كشفًا
         state.inbox.log = Inbox.recordDrain(state.inbox.log, todayISO(), fresh.length);
         await db.set('inboxLog', state.inbox.log);
         await reload();
-        toast(`وصلت ${fresh.length} عملية من إشعارات البنك`, 'ok');
         schedulePush();
       }
-    } else if (!silent) {
-      toast(failed.length ? `${failed.length} رسالة لم تُفهم` : 'لا رسائل جديدة', failed.length ? 'warn' : '');
     }
+
+    /**
+     * حصيلةُ السحب الأخير مفصَّلةً: كم وصل، وكم فُهم، وكم أُضيف، وكم كان
+     * مسجَّلًا سلفًا، وكم لم يُفهم.
+     *
+     * كانت الحالةُ الوسطى صامتة: رسالةٌ تصل فتُفهم فتكون مسجَّلةً سلفًا،
+     * فتُمحى من الصندوق ولا يُقال شيء — لا نجاحٌ ولا تنبيه. فيرى صاحبُ
+     * النسخة أتمتتَه تنطلق ولا يجد أثرًا ولا سببًا، ويظنّ العطب في مصرفه
+     * أو في التحليل وهو في مكانٍ ثالث. فتُذكر الحصيلة كلُّها لا نصفُها.
+     */
+    state.inbox.last = {
+      at: new Date().toISOString(),
+      arrived: arrived?.length || 0,
+      understood: added.length,
+      added: fresh.length,
+      dup: dups.length,
+      failed: failed.length,
+    };
+    await db.set('inboxLast', state.inbox.last);
+
+    if (fresh.length) toast(`وصلت ${fresh.length} عملية من إشعارات البنك`, 'ok');
+    // المكرَّر يُقال ولو كان السحب صامتًا: هو أخفى الحالات وأحوجُها إلى بيان
+    else if (dups.length) toast(`وصلت ${dups.length} رسالة، وكلُّها مسجَّلة عندك سلفًا`, 'warn');
+    else if (!silent) toast(failed.length ? `${failed.length} رسالة لم تُفهم` : 'لا رسائل جديدة', failed.length ? 'warn' : '');
+
     state.inbox.lastAt = new Date().toISOString();
     state.inbox.waiting = 0;   // ما فُهم أُخذ، فلا شيء ينتظر
   } catch (err) {
