@@ -33,7 +33,7 @@ const state = {
   sync: { secret: null, lastAt: null, status: '', busy: false, foundRemote: null, remoteCount: null, size: null },
   skipSync: false,
   reminders: [],
-  inbox: { boxId: null, lastAt: null, last: null, failed: [], status: '', busy: false, log: {}, senders: {}, waiting: 0 },
+  inbox: { boxId: null, lastAt: null, last: null, recent: [], failed: [], status: '', busy: false, log: {}, senders: {}, waiting: 0 },
   notify: { permission: 'default', enabled: false },
   paste: null,                // لصق الرسائل الفائتة: النصّ ونتيجة تحليله
   tagging: null,              // معرّف العملية التي يُحرَّر تصنيفها
@@ -80,6 +80,7 @@ async function boot() {
   state.inbox.log = await db.get('inboxLog', {});
   state.inbox.senders = await db.get('inboxSenders', {});
   state.inbox.last = await db.get('inboxLast', null);
+  state.inbox.recent = await db.get('inboxRecent', []);
   state.notify.enabled = await db.get('notifyEnabled', false);
   state.notify.permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
   const saved = await db.get('financeForm', null);
@@ -135,7 +136,7 @@ async function drainInbox({ silent = false } = {}) {
   if (!state.sync.secret) return;
   state.inbox.busy = true;
   try {
-    const { added, failed, arrived } = await Inbox.drain(state.sync.secret, { accountLabel: 'إشعارات البنك' });
+    const { added, failed, arrived, raw } = await Inbox.drain(state.sync.secret, { accountLabel: 'إشعارات البنك' });
     state.inbox.failed = failed;
     state.inbox.status = '';
     // من وصل يُسجَّل ولو لم يصر عمليةً: غيابُ مصرفٍ دليلٌ على أتمتته لا عليه
@@ -165,6 +166,19 @@ async function drainInbox({ silent = false } = {}) {
      * النسخة أتمتتَه تنطلق ولا يجد أثرًا ولا سببًا، ويظنّ العطب في مصرفه
      * أو في التحليل وهو في مكانٍ ثالث. فتُذكر الحصيلة كلُّها لا نصفُها.
      */
+    /**
+     * نصُّ ما وصل، على الجهاز وحده.
+     *
+     * السحب يمحو ما فُهم من الصندوق فورًا، فإن لم يظهر أثرُه في اللوحة لم
+     * يبقَ ما يُراجَع: لا يُعرف أوصلت الرسالة أصلًا، ولا بأيّ نصٍّ وصلت،
+     * ولا أنّ حقل الأتمتة يبعث نصًّا ثابتًا بدل الرسالة. فتُحفظ آخرُ عشرٍ
+     * ليُنظر فيها. ولا تغادر الجهاز ولا تدخل النسخة المزامَنة.
+     */
+    if (raw?.length) {
+      state.inbox.recent = [...raw, ...(state.inbox.recent || [])].slice(0, 10);
+      await db.set('inboxRecent', state.inbox.recent);
+    }
+
     state.inbox.last = {
       at: new Date().toISOString(),
       arrived: arrived?.length || 0,

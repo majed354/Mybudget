@@ -268,7 +268,20 @@ export async function drain(secret, { accountLabel } = {}) {
   // لا نمسح ما لم يُفهم: يبقى ليُراجَع، ويُمسح بمهلته
   const clear = [...added.map((t) => t.smsId), ...purge].filter(Boolean);
   if (clear.length) await call('DELETE', box, null, `&ids=${clear.join(',')}`);
-  return { added, failed, arrived: messages.map(originOf) };
+  return {
+    added, failed,
+    arrived: messages.map(originOf),
+    raw: messages.map((m) => {
+      const p = parseBankSMS(m.text, { today: (m.receivedAt || '').slice(0, 10) || undefined, sender: m.sender });
+      return {
+        at: m.receivedAt || '',
+        sender: String(m.sender || ''),
+        text: String(m.text || '').slice(0, 400),
+        ok: !!p.ok,
+        reason: p.ok ? '' : (p.reason || ''),
+      };
+    }),
+  };
 }
 
 /**

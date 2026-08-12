@@ -260,3 +260,22 @@ test('رسالةٌ بلا نصّ لا تُسقط البصمة', async () => {
   const t = smsToTransaction(p, { id: 'x', text: '' }, 'إشعارات البنك');
   assert.ok(t.hash, 'يرجع إلى معرّف الإيداع');
 });
+
+// السحب يمحو ما فُهم من الصندوق، فإن لم يظهر أثرُه لم يبقَ ما يُراجَع
+test('السحب يعيد نصَّ ما وصل بحكمه، لا عدَده فقط', async (t) => {
+  const { drain } = await import('../src/inbox.js');
+  const msgs = [
+    { id: 'a', sender: 'BankAlbilad', text: 'شراء نقاط بيع\nمدى1234 Apple Pay\nبـ55 SAR\nمنمتجر\n2026-08-12 21:07', receivedAt: '2026-08-12T18:07:00Z' },
+    { id: 'b', sender: 'BankAlbilad', text: 'مُدخل الاختصار', receivedAt: '2026-08-12T18:10:00Z' },
+  ];
+  global.fetch = async (url, opt) => ({ ok: true, status: 200, json: async () => ((opt?.method || 'GET') === 'GET' ? { messages: msgs } : { ok: true }) });
+  t.after(() => { delete global.fetch; });
+
+  const { raw } = await drain('a'.repeat(32));
+  assert.equal(raw.length, 2, 'كلُّ ما وصل، لا ما فُهم منه');
+  assert.equal(raw[0].ok, true);
+  assert.match(raw[0].text, /نقاط بيع/, 'النصّ كما وصل ليُقارَن بالرسالة');
+  assert.equal(raw[0].sender, 'BankAlbilad');
+  assert.equal(raw[1].ok, false, 'وحقلٌ أُسيء إعداده يظهر بنصّه فيُعرف');
+  assert.ok(raw[1].reason);
+});

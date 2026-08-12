@@ -958,6 +958,19 @@ function inboxBody(state) {
     </div>
     <p class="hint">${i.busy ? 'جارٍ…' : i.lastAt ? `آخر سحب: ${escapeHTML(new Date(i.lastAt).toLocaleString('ar-SA'))}` : 'لم يُسحب شيء بعد'}
       ${i.status ? `<span class="danger-text"> — ${escapeHTML(i.status)}</span>` : ''}</p>
+    ${i.recent?.length ? `<details class="fold">
+      <summary class="card-head"><h3 style="margin:0">نصُّ آخر ما وصل إلى الصندوق (${num(i.recent.length)})</h3>
+        <span class="hint">على هذا الجهاز وحده</span></summary>
+      <ul class="failed-list">${i.recent.map((m) => `<li>
+        <div class="hint">${escapeHTML(m.at ? new Date(m.at).toLocaleString('ar-SA') : '—')}
+          · المرسِل: <code>${escapeHTML(m.sender || '(فارغ)')}</code>
+          · <strong class="${m.ok ? 'pos' : 'danger-text'}">${m.ok ? 'فُهمت' : `لم تُفهم — ${escapeHTML(m.reason)}`}</strong></div>
+        <pre class="raw-sms">${escapeHTML(m.text)}</pre>
+      </li>`).join('')}</ul>
+      <p class="hint">إن رأيتَ النصّ نفسه يتكرّر في كل مرة، فقيمةُ <code>text</code> في الأتمتة نصٌّ مكتوب
+        لا «مُدخل الاختصار». وإن كانت القائمة فارغةً بعد عمليةٍ جديدة، فالرسالة لم تغادر جوالك.</p>
+    </details>` : ''}
+
     ${i.last ? `<table class="table compact">
       <tbody>
         <tr><td>وصلت</td><td class="ltr"><strong>${num(i.last.arrived)}</strong> رسالة</td></tr>
